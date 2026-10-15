@@ -24,3 +24,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Working notes, not part of the public repo
+CLAUDE.md
