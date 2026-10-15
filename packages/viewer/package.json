@@ -1,0 +1,41 @@
+{
+  "name": "@caixax/mtv-viewer",
+  "version": "0.0.0",
+  "description": "WebGL playback engine for Momentum Mod replays: map resolution, playback clock and renderer",
+  "author": "caixax <westlargo@proton.me>",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@caixax/mtv": "workspace:*"
+  },
+  "keywords": [
+    "momentum-mod",
+    "replay",
+    "mtv",
+    "webgl",
+    "source-engine",
+    "bsp"
+  ]
+}
