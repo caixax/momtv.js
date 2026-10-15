@@ -59,6 +59,21 @@ describe('parseReplay: body sections', () => {
   });
 });
 
+describe('getPlayerStateAtTime edges', () => {
+  it('clamps before the start and after the end', () => {
+    const first = replay.getPlayerStateAtTime(-5);
+    expect(first.tick).toBe(0);
+    const last = replay.getPlayerStateAtTime(10_000);
+    expect(last.tick).toBe(replay.frameCount - 1);
+  });
+
+  it('interpolates yaw across the wrap', () => {
+    const s = replay.getPlayerStateAtTime(12.345);
+    expect(s.eyeAngles[1]).toBeGreaterThanOrEqual(-180);
+    expect(s.eyeAngles[1]).toBeLessThanOrEqual(180);
+  });
+});
+
 describe('player track', () => {
   const track = replay.toTrack();
 

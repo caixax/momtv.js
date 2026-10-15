@@ -90,7 +90,7 @@ export class MtvReplay {
       return v;
     };
     return {
-      tick: t0,
+      tick: a.tick,
       origin: [
         lerp(a.origin[0], b.origin[0]),
         lerp(a.origin[1], b.origin[1]),
