@@ -58,7 +58,12 @@ export class MtvReplay {
    * access and cached; prefer this for playback and bulk export.
    */
   toTrack(): PlayerTrack {
-    this.track_ ??= decodePlayerTrack(this.body, this.header.frameCount, this.header.tickInterval);
+    this.track_ ??= decodePlayerTrack(
+      this.body,
+      this.header.frameCount,
+      this.header.tickInterval,
+      this.header.propBits,
+    );
     return this.track_;
   }
 

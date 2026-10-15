@@ -161,6 +161,32 @@ const PLAYER_PROP_DECODERS: Record<string, PropDecoder> = {
   m_fFlags: (r, s) => {
     s.flags = r.readBits(11);
   },
+  // properties added by newer builds (widths from the game's table dump)
+  m_ubEFNoInterpParity: (r) => void r.readBits(2),
+  m_flGroundPositionZ: (r) => void r.readFloat32(),
+  m_iLandTick: (r) => void r.readBits(32),
+  m_iJumpTick: (r) => void r.readBits(32),
+  m_iEarlyJumpTiming: (r) => void r.readBits(32),
+  m_hActiveWeapon: (r) => void r.readBits(23),
+  m_hPrimaryTimer: (r) => void r.readBits(23),
+  m_dropTeleportState: (r) => void r.readBits(4),
+  wishVel: (r) => {
+    r.readFloat32();
+    r.readFloat32();
+  },
+  'wishVel[2]': (r) => void r.readFloat32(),
+  moveStatus: (r) => void r.readBits(8),
+  acceleration: (r) => void r.readFloat32(),
+  maxspeed: (r) => void r.readFloat32(),
+  friction: (r) => void r.readFloat32(),
+  hasteEndTick: (r) => void r.readBits(32),
+  damageBoostEndTick: (r) => void r.readBits(32),
+  slickEndTick: (r) => void r.readBits(32),
+  flightEndTick: (r) => void r.readBits(32),
+  defragTimerEndTick: (r) => void r.readBits(32),
+  defragTimerFlags: (r) => void r.readBits(8),
+  m_bCanAirJump: (r) => void r.readBits(1),
+  m_bRefreshAirJumpOnLand: (r) => void r.readBits(1),
 };
 
 /** The class name the player entity uses in the replay class table. */
@@ -177,7 +203,12 @@ export function decodePlayerTrack(
   body: ReplayBody,
   frameCount: number,
   tickInterval: number,
+  propBits = 5,
 ): PlayerTrack {
+  const listThenValues = body.revision === 2;
+  // revision 1 writes a constant block count (4) except on busy ticks, which
+  // is a strong cheap filter against frame-shaped bits inside trailing blocks
+  let learnedA = -1;
   const playerClass = body.classes.find((c) => c.name === PLAYER_CLASS);
   if (!playerClass) {
     throw new MtvError('BAD_BODY', `Replay has no ${PLAYER_CLASS} class`);
@@ -193,7 +224,7 @@ export function decodePlayerTrack(
   // authoritative tick -> frame byte offset map from the keyframe index
   const anchors = new Map<number, number>();
   for (const kf of body.keyframeIndex) {
-    if (kf.frameOffset < dataLen) anchors.set(kf.tick + 1, kf.frameOffset);
+    if (kf.frameOffset >= 0 && kf.frameOffset < dataLen) anchors.set(kf.tick + 1, kf.frameOffset);
   }
 
   const state: MutableState = {
@@ -228,7 +259,7 @@ export function decodePlayerTrack(
       if (f2) r.readUBitVar(); // animation time delta
       let last = -1;
       while (r.remainingBits >= 8) {
-        const idx = r.readBits(5);
+        const idx = r.readBits(propBits);
         if (idx <= last || idx >= playerClass.props.length) break;
         last = idx;
         const dec = decoders[idx];
@@ -243,11 +274,9 @@ export function decodePlayerTrack(
 
   // Every tick has exactly one frame record; frames always start with the
   // player entity block (entity 0, flag bits 0). The leading 6-bit block
-  // count is constant for a replay (4 in the sample: player, viewmodel and
-  // both weapons) except on ticks where extra entities update, where it grows
-  // by the number of extra blocks. Frame starts are validated by parsing plus
-  // a successor check.
-  let learnedA = -1;
+  // count equals the number of entity blocks (4 on a bhop run: player,
+  // viewmodel and both weapons; more in modes with extra entities). Frame
+  // starts are validated by parsing plus a successor check.
 
   // Parses a frame at a byte offset. Returns the end bit position of the
   // player block, or null if the bytes do not form a frame.
@@ -257,9 +286,12 @@ export function decodePlayerTrack(
     try {
       const r = new BitReader(bytes, base + byteOffset, dataLen - byteOffset);
       const blockCount = r.readBits(6);
-      if (learnedA === -1) {
-        if (blockCount === 0 || blockCount > 48) return null;
-      } else if (blockCount < learnedA || blockCount > learnedA + 2) {
+      if (blockCount === 0) return null;
+      if (
+        body.revision === 1 &&
+        learnedA !== -1 &&
+        (blockCount < learnedA || blockCount > learnedA + 4)
+      ) {
         return null;
       }
       if (r.readUBitVar() !== 0) return null;
@@ -267,11 +299,26 @@ export function decodePlayerTrack(
       const propCount = r.readUBitVar();
       if (propCount > playerClass.props.length) return null;
       const scratch = { ...state };
-      for (let i = 0; i < propCount; i++) {
-        const idx = r.readBits(5);
-        const dec = decoders[idx];
-        if (!dec) return null;
-        dec(r, scratch);
+      if (listThenValues) {
+        // revision 2 writes all property indices first, then the values
+        const idxs: number[] = [];
+        for (let i = 0; i < propCount; i++) {
+          const idx = r.readBits(propBits);
+          if (idx >= playerClass.props.length) return null;
+          idxs.push(idx);
+        }
+        for (const idx of idxs) {
+          const dec = decoders[idx];
+          if (!dec) return null;
+          dec(r, scratch);
+        }
+      } else {
+        for (let i = 0; i < propCount; i++) {
+          const idx = r.readBits(propBits);
+          const dec = decoders[idx];
+          if (!dec) return null;
+          dec(r, scratch);
+        }
       }
       if (learnedA === -1) learnedA = blockCount;
       return { endBit: r.bitPos, scratch };
@@ -289,8 +336,7 @@ export function decodePlayerTrack(
     const limit = Math.min(fromByte + limitBytes, dataLen - 1);
     for (let b = fromByte; b < limit; b++) {
       const b0 = bytes[base + b]!;
-      if (learnedA !== -1 ? b0 < learnedA || b0 > learnedA + 2 : b0 === 0 || (b0 & 0xc0) !== 0)
-        continue;
+      if (b0 === 0 || (b0 & 0xc0) !== 0) continue;
       const b1 = bytes[base + b + 1]!;
       if ((b1 & 0x3f) !== 0) continue;
       if (parsePlayerFrame(b)) return b;
@@ -341,9 +387,9 @@ export function decodePlayerTrack(
         let last = -1;
         let props = 0;
         let core = false;
-        while (r.bitPos + 5 <= endBit) {
+        while (r.bitPos + propBits <= endBit) {
           const peek = r.bitPos;
-          const idx = r.readBits(5);
+          const idx = r.readBits(propBits);
           const dec = decoders[idx];
           if (idx <= last || !dec) {
             r.bitPos = peek;
@@ -431,7 +477,7 @@ export function decodePlayerTrack(
           : scanNextFrame(parsed ? Math.ceil(parsed.endBit / 8) - base : offset + 2);
     }
 
-    const kfRange = kfRanges.get(tick);
+    const kfRange = body.revision === 1 ? kfRanges.get(tick) : undefined;
     if (kfRange) applyKeyframeBlock(kfRange);
 
     const o = tick * STRIDE;
@@ -464,7 +510,7 @@ export function decodePlayerTrack(
     offset = next;
   }
 
-  const runStart = body.timeline.find((e) => e.type === 2 && e.zoneFlag === 3);
+  const runStart = body.timeline.find((e) => e.zoneFlag === 3);
   return {
     tickInterval,
     frameCount,

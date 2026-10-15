@@ -69,6 +69,13 @@ export interface KeyframeIndexEntry {
 
 /** All parsed sections of a decompressed replay body. */
 export interface ReplayBody {
+  /**
+   * Body layout revision. Both carry formatVersion 2 in the header: revision
+   * 1 is written by builds up to early 2025 (18 byte timeline records with a
+   * run-timer double, explicit baseline records), revision 2 by current
+   * playtest builds (compact timeline, baselines folded into the keyframes).
+   */
+  revision: 1 | 2;
   timeline: TimelineEvent[];
   classes: ReplayClass[];
   sounds: ReplaySound[];
@@ -101,24 +108,68 @@ export function parseBody(
     'classCount' | 'sampleCount' | 'baselineCount' | 'keyFrameCount' | 'frameCount'
   >,
 ): ReplayBody {
+  try {
+    return parseBodyRevision(body, header, 1);
+  } catch (error) {
+    if (!(error instanceof MtvError)) throw error;
+    return parseBodyRevision(body, header, 2);
+  }
+}
+
+function parseBodyRevision(
+  body: Uint8Array,
+  header: Pick<
+    ReplayHeader,
+    'classCount' | 'sampleCount' | 'baselineCount' | 'keyFrameCount' | 'frameCount'
+  >,
+  revision: 1 | 2,
+): ReplayBody {
   const r = new ByteReader(body);
 
   // 1. timeline
-  const timelineCount = r.u32('timeline count');
-  if (timelineCount > MAX_TIMELINE_EVENTS) {
-    throw new MtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
-  }
   const timeline: TimelineEvent[] = [];
-  for (let i = 0; i < timelineCount; i++) {
-    timeline.push({
-      tick: r.i32('event tick'),
-      zoneFlag: r.u16('event zone flag'),
-      trackNum: r.u8('event track'),
-      type: r.u8('event type'),
-      time: r.f64('event time'),
-      majorNum: r.u8('event major'),
-      minorNum: r.u8('event minor'),
-    });
+  if (revision === 1) {
+    const timelineCount = r.u32('timeline count');
+    if (timelineCount > MAX_TIMELINE_EVENTS) {
+      throw new MtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
+    }
+    for (let i = 0; i < timelineCount; i++) {
+      timeline.push({
+        tick: r.i32('event tick'),
+        zoneFlag: r.u16('event zone flag'),
+        trackNum: r.u8('event track'),
+        type: r.u8('event type'),
+        time: r.f64('event time'),
+        majorNum: r.u8('event major'),
+        minorNum: r.u8('event minor'),
+      });
+    }
+  } else {
+    // revision 2: u16 count, compact records {i32 tick}{u8 flag} with two
+    // extra bytes {u8 track}{u8 major} when flag is 2 (checkpoint enter)
+    const timelineCount = r.u16('timeline count');
+    if (timelineCount > MAX_TIMELINE_EVENTS) {
+      throw new MtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
+    }
+    for (let i = 0; i < timelineCount; i++) {
+      const tick = r.i32('event tick');
+      const flag = r.u8('event flag');
+      let trackNum = 0;
+      let majorNum = 0;
+      if (flag === 2) {
+        trackNum = r.u8('event track');
+        majorNum = r.u8('event major');
+      }
+      timeline.push({
+        tick,
+        zoneFlag: flag,
+        trackNum,
+        type: flag,
+        time: NaN,
+        majorNum,
+        minorNum: 0,
+      });
+    }
   }
 
   // 2. class table
@@ -153,17 +204,35 @@ export function parseBody(
     throw new MtvError('TRUNCATED', 'Baseline section exceeds the body');
   }
   const knownClassIds = new Set(classes.map((c) => c.classId));
-  const baselines = indexBaselines(body, r.pos, baselineEnd, header.baselineCount, knownClassIds);
+  const baselines =
+    baselineSize > 0
+      ? indexBaselines(body, r.pos, baselineEnd, header.baselineCount, knownClassIds)
+      : [];
   r.seek(baselineEnd);
 
   // 6. keyframe index
   const keyframeIndex: KeyframeIndexEntry[] = [];
-  for (let k = 0; k < header.keyFrameCount; k++) {
-    keyframeIndex.push({
-      tick: r.u32('keyframe tick'),
-      keyframeOffset: r.u32('keyframe offset'),
-      frameOffset: r.u32('keyframe frame offset'),
-    });
+  if (revision === 1) {
+    for (let k = 0; k < header.keyFrameCount; k++) {
+      keyframeIndex.push({
+        tick: r.u32('keyframe tick'),
+        keyframeOffset: r.u32('keyframe offset'),
+        frameOffset: r.u32('keyframe frame offset'),
+      });
+    }
+  } else {
+    // revision 2: the tick 0 keyframe is implicit (8 zero bytes where its
+    // tick and offset would go, no frame offset), then full 12 byte entries
+    const z1 = r.u32('implicit keyframe tick');
+    const z2 = r.u32('implicit keyframe offset');
+    keyframeIndex.push({ tick: z1, keyframeOffset: z2, frameOffset: -1 });
+    for (let k = 1; k < header.keyFrameCount; k++) {
+      keyframeIndex.push({
+        tick: r.u32('keyframe tick'),
+        keyframeOffset: r.u32('keyframe offset'),
+        frameOffset: r.u32('keyframe frame offset'),
+      });
+    }
   }
 
   // 7. keyframe data
@@ -178,7 +247,14 @@ export function parseBody(
     throw new MtvError('TRUNCATED', 'Frame data section exceeds the body');
   }
 
+  // structural validation: both sections must land exactly on the body end,
+  // which is what disambiguates the two revisions reliably
+  if (frameData.offset + frameData.length !== body.length) {
+    throw new MtvError('BAD_BODY', 'Frame data does not end at the body end');
+  }
+
   return {
+    revision,
     timeline,
     classes,
     sounds,

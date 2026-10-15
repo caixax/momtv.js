@@ -221,6 +221,19 @@ CFuncBrush baselines fully decode with these widths: a 22-bit record header afte
 
 About 3.7% of ticks carry a 4-byte frame: header 1, entity 0, flags `(0,1)` and no properties. Around each one the decoded position jumps by exactly one tick of velocity, so these are ticks recorded without a player snapshot (probably the recorder's update rate). Players should extrapolate or interpolate across them.
 
+## Body revision 2 (current playtest builds) [verified]
+
+Replays written by current 0.10.x playtest builds keep formatVersion 2 in the header but revise the body layout. A parser distinguishes the revisions structurally (revision 1 parses to the exact body end or it is revision 2). Differences:
+
+- Timeline: `uint16 count`, then compact records `{int32 tick}{uint8 flag}` with two extra bytes `{uint8 track}{uint8 major}` when flag is 2 (checkpoint enter). Flags observed: 3 run start, 0 unknown, 2 checkpoint, 1 final tick. No run-timer double anymore.
+- The player class now has 49 properties (propBits 7 would overflow 6 bits; the header says 6 and frames use 6-bit property indices). New properties include wishVel, moveStatus, acceleration, maxspeed, friction, several EndTick fields, m_flGroundPositionZ, m_iLandTick/m_iJumpTick, m_hActiveWeapon and m_hPrimaryTimer; widths confirmed against the game's own class table dump.
+- The baseline section size is 0: initial entity state lives in the tick 0 keyframe instead.
+- Keyframe index: the tick 0 entry is implicit (8 zero bytes, no frame offset), followed by keyFrameCount - 1 full 12 byte entries with the same {tick, keyframeOffset, frameOffset} layout as revision 1.
+- Frames keep the same container ({6-bit block count}{entity blocks}, player first) but each block now writes all property indices first and then the values in that order (classic Source field list), instead of interleaving index and value.
+- Frame data may start with a prologue before the first frame in some gamemodes (observed in defrag and deathrun replays); the frame walker skips it.
+
+Oracle note: on maps with push physics (boosters, bumpers, conveyors) the recorded m_vecVelocity legitimately disagrees with per-tick position deltas while the push is acting, since base velocity is not part of the recorded property set. Plain bhop runs validate at over 99%.
+
 ## Open questions
 
 - Baseline `tick` field semantics (275 vs -2468 in the sample).
@@ -229,3 +242,4 @@ About 3.7% of ticks carry a 4-byte frame: header 1, entity 0, flags `(0,1)` and 
 - Exact per-prop widths for CMomentumViewModel, CMomentumPistol and CKnife in the sample's (older) build: today's table dump does not fully match, so a replay recorded by the current build is needed to validate.
 - The leading 6-bit frame field (4 in normal frames, 1 in empty ones) and the end-of-frame terminator (observed `UBitVar 0` + 2 bits + padding).
 - One isolated misread in the sample (tick 1140: a velocity component decodes as -0.0 while the position clearly keeps moving), pointing at a rare prop this parser does not size correctly yet.
+- Revision 2: the structure of the keyframe payloads (per-entity mini records), the frame data prologue, and deathrun replays decode poorly (moving platforms and doors interact badly with the current frame walker).
