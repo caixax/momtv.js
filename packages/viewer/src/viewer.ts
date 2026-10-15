@@ -1,6 +1,7 @@
 import { parseReplay, type MtvReplay, type PlayerState } from '@caixax/mtv';
 import { parseBsp, type BspMap } from './bsp/bsp-file.js';
 import { MapRenderer } from './gl/map-renderer.js';
+import { loadMaterials, type LoadMaterialsOptions } from './materials.js';
 import { resolveMap, type ResolveMapOptions } from './map-resolver.js';
 import {
   firstPersonCamera,
@@ -10,9 +11,11 @@ import {
 } from './playback.js';
 
 /** Options for {@link createViewer}. */
-export interface ViewerOptions extends ResolveMapOptions {
+export interface ViewerOptions extends ResolveMapOptions, LoadMaterialsOptions {
   /** Field of view in degrees. Defaults to 90. */
   fov?: number;
+  /** Skip texture loading and render flat material colours. */
+  noTextures?: boolean;
 }
 
 /** What to load: a replay with an optional explicit map. */
@@ -172,7 +175,8 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
         mapBytes = resolved.data;
       }
       map = parseBsp(mapBytes);
-      renderer.upload(map);
+      const materials = options.noTextures ? undefined : await loadMaterials(map, options);
+      renderer.upload(map, materials);
       clock = new PlaybackClock(replay);
       const start = replay.getPlayerState(0);
       free.x = start.origin[0];

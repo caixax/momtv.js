@@ -35,4 +35,7 @@ export {
   type BspModel,
 } from './bsp/bsp-file.js';
 export { MapRenderer, type RenderCamera } from './gl/map-renderer.js';
+export { loadMaterials, type LoadedMaterial, type LoadMaterialsOptions } from './materials.js';
+export { readPakfile, readPakEntry, type PakEntry } from './bsp/pakfile.js';
+export { parseVtf, parseVmtBaseTexture, type DecodedTexture } from './bsp/vtf.js';
 export { createViewer, type LoadInput, type Viewer, type ViewerOptions } from './viewer.js';
