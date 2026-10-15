@@ -199,8 +199,7 @@ let ok = 0;
 let fail = 0;
 const failsByClass = {};
 for (let rec = 0; rec < 198 && pos < SECTION_END; rec++) {
-  const tick = view.getInt32(pos, true);
-  pos += 4;
+  pos += 4; // i32 tick, unused here
   let ent = 0;
   let shift = 0;
   for (;;) {

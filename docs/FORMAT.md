@@ -1,22 +1,15 @@
 # MomentumTV replay format (.mtv)
 
-Reverse engineered specification of the Momentum Mod replay format, version 2,
-as written by Momentum Mod 0.10.x (Strata Source).
+Reverse engineered specification of the Momentum Mod replay format, version 2, as written by Momentum Mod 0.10.x (Strata Source).
 
 Every field is annotated with a confidence level:
 
-- **[verified]**: confirmed against the official reader, or validated by an
-  independent oracle (for example, decoded velocity matching per-tick position
-  deltas across thousands of frames).
+- **[verified]**: confirmed against the official reader, or validated by an independent oracle (for example, decoded velocity matching per-tick position deltas across thousands of frames).
 - **[strong]**: consistent with all observed data, no oracle contradicts it.
-- **[hypothesis]**: plausible interpretation, needs more samples or game
-  knowledge to confirm.
+- **[hypothesis]**: plausible interpretation, needs more samples or game knowledge to confirm.
 - **[unknown]**: structure or meaning not yet understood.
 
-Primary sources: the official header/splits reader in momentum-mod/website
-(`libs/formats/replay`, MIT), the official sample replay (bhop_eazy), and
-byte and bit level analysis of that sample. Everything below the splits block
-was reverse engineered from data; nothing here is derived from game code.
+Primary sources: the official header/splits reader in momentum-mod/website (`libs/formats/replay`, MIT), the official sample replay (bhop_eazy), and byte and bit level analysis of that sample. Everything below the splits block was reverse engineered from data; nothing here is derived from game code.
 
 ## File layout
 
@@ -55,15 +48,11 @@ All integers little endian. The C++ struct is packed (`#pragma pack(1)`).
 | 193    | uint8    | tempEntClassBits  | bits per temp entity class index          |
 | 194    | uint8    | style             | see Style enum                            |
 
-The official reader stops at `style` and leaves the counter fields
-commented out; their meaning here was confirmed by using them to parse the
-body (every counter matches the decoded structure exactly). [verified]
+The official reader stops at `style` and leaves the counter fields commented out; their meaning here was confirmed by using them to parse the body (every counter matches the decoded structure exactly). [verified]
 
 ## Run splits [verified]
 
-At offset 195: `int32 length`, then `length` bytes holding UTF-8 JSON whose
-final byte is a NUL terminator. The JSON is `{trackStats, segments[]}` as
-modeled by momentum-mod/website (`RunSplits`).
+At offset 195: `int32 length`, then `length` bytes holding UTF-8 JSON whose final byte is a NUL terminator. The JSON is `{trackStats, segments[]}` as modeled by momentum-mod/website (`RunSplits`).
 
 ## Compressed body [verified]
 
@@ -94,9 +83,7 @@ Sections in order:
 
 ### Bit stream conventions [verified]
 
-Bit-packed data uses Source engine `bf_read`/`bf_write` semantics:
-little endian, LSB-first within each byte. `UBitVar` is the CS:GO/Strata
-variant: 6 bits are read, the top 2 of those 6 select an extension:
+Bit-packed data uses Source engine `bf_read`/`bf_write` semantics: little endian, LSB-first within each byte. `UBitVar` is the CS:GO/Strata variant: 6 bits are read, the top 2 of those 6 select an extension:
 
 - `(six & 48) == 0`: value = six (0..15)
 - `== 16`: value = (six & 15) | readBits(4) << 4
@@ -117,22 +104,18 @@ variant: 6 bits are read, the top 2 of those 6 select an extension:
 | 16     | uint8  | majorNum | segment number                                                                                    |
 | 17     | uint8  | minorNum | checkpoint number                                                                                 |
 
-In the sample the final record's `time` equals the header `runTime` exactly,
-and the event ticks match the keyframe index ticks one to one. [verified]
+In the sample the final record's `time` equals the header `runTime` exactly, and the event ticks match the keyframe index ticks one to one. [verified]
 
 ### 2. Class table [verified]
 
 `classCount` records, each:
 
-- `uint8 classId`: network class id (not contiguous: 0, 1, 2, 10, 31, 35 in
-  the sample)
+- `uint8 classId`: network class id (not contiguous: 0, 1, 2, 10, 31, 35 in the sample)
 - `char[] className` NUL terminated
 - `uint8 propCount`
 - `propCount` NUL terminated property names
 
-Property order in this table defines the property index used in all
-bit-packed entity data. Property value encodings are not stored; they are
-implied by the game's network tables (see "Property encodings").
+Property order in this table defines the property index used in all bit-packed entity data. Property value encodings are not stored; they are implied by the game's network tables (see "Property encodings").
 
 ### 3. Sound table [strong]
 
@@ -140,55 +123,40 @@ implied by the game's network tables (see "Property encodings").
 
 ### 4. Game event definitions [verified]
 
-`uint32 size`, then `size` bytes of protobuf resembling
-`CSVCMsg_GameEventList`: repeated descriptors
-`{ varint eventId; string name; repeated { varint type; string key } }`.
-The sample defines player_jumped, player_landed, ramp_board, ramp_leave,
-slide_started, slide_ended, player_explosive_hit.
+`uint32 size`, then `size` bytes of protobuf resembling `CSVCMsg_GameEventList`: repeated descriptors `{ varint eventId; string name; repeated { varint type; string key } }`. The sample defines player_jumped, player_landed, ramp_board, ramp_leave, slide_started, slide_ended, player_explosive_hit.
 
 ### 5. Baselines [strong]
 
 `uint32 sectionSize`, then `baselineCount` records, byte aligned:
 
-- `int32 tick`: 275 for every record in the sample except the last zone
-  region, which has -2468. Meaning unclear. [unknown]
+- `int32 tick`: 275 for every record in the sample except the last zone region, which has -2468. Meaning unclear. [unknown]
 - varint (protobuf style): entity ordinal, contiguous 0..baselineCount-1
 - bit-packed payload, padded with zero bits to the next byte boundary
 
 Payload:
 
 - `UBitVar classId` (matches the class table)
-- 2 bits: field flags. Observed `(1,1)` for the player followed by two
-  UBitVar values (56 and 27 in the sample; probably simulation and animation
-  time) [hypothesis]. Other classes use other values; layout after the flags
-  is not fully mapped for every class. [unknown]
-- All properties of the class, each as `propBits`-bit property index
-  (table order, ascending) followed by the type-specific value.
+- 2 bits: field flags. Observed `(1,1)` for the player followed by two UBitVar values (56 and 27 in the sample; probably simulation and animation time) [hypothesis]. Other classes use other values; layout after the flags is not fully mapped for every class. [unknown]
+- All properties of the class, each as `propBits`-bit property index (table order, ascending) followed by the type-specific value.
 - Zero padding to byte boundary (less than 8 bits).
 
-The player baseline in the sample parses exactly to its payload end with the
-property encodings below. [verified]
+The player baseline in the sample parses exactly to its payload end with the property encodings below. [verified]
 
 ### 6. Keyframe index [verified]
 
-`keyFrameCount` records of 12 bytes:
-`{ uint32 tick, uint32 keyframeDataOffset, uint32 frameDataOffset }`.
+`keyFrameCount` records of 12 bytes: `{ uint32 tick, uint32 keyframeDataOffset, uint32 frameDataOffset }`.
 
 - `tick`: keyframes are written at every timeline event tick.
 - `keyframeDataOffset`: byte offset of this keyframe inside section 7.
-- `frameDataOffset`: byte offset inside section 8 of the frame for
-  `tick + 1` (resume point when seeking to this keyframe).
+- `frameDataOffset`: byte offset inside section 8 of the frame for `tick + 1` (resume point when seeking to this keyframe).
 
 ### 7. Keyframe data [strong]
 
-`uint32 size`, then the keyframes back to back. A keyframe is a delta
-against the baselines: a leading 6-bit count-like value [hypothesis], then
-entity blocks. Non-player blocks are not fully mapped. The player block is:
+`uint32 size`, then the keyframes back to back. A keyframe is a delta against the baselines: a leading 6-bit count-like value [hypothesis], then entity blocks. Non-player blocks are not fully mapped. The player block is:
 
 - 6 bits entity field (0 for the player)
 - 2 bits flags (observed 0)
-- properties until the block ends, each `{5-bit index, value}`; only
-  properties that differ from the baseline are present.
+- properties until the block ends, each `{5-bit index, value}`; only properties that differ from the baseline are present.
 
 ### 8. Frame data [verified for the player block]
 
@@ -196,28 +164,19 @@ entity blocks. Non-player blocks are not fully mapped. The player block is:
 
 Frame:
 
-- 6 bits: count-like header, 4 in every normal frame of the sample, 1 in
-  sparse "empty" frames [hypothesis: number of entity blocks]
+- 6 bits: count-like header, 4 in every normal frame of the sample, 1 in sparse "empty" frames [hypothesis: number of entity blocks]
 - entity blocks. The first block is the player:
   - `UBitVar entity` (0)
-  - 2 bits flags: `(0,0)` = property list follows; `(0,1)` = empty update,
-    no further player data this tick [strong]
+  - 2 bits flags: `(0,0)` = property list follows; `(0,1)` = empty update, no further player data this tick [strong]
   - `UBitVar propCount`
-  - `propCount` properties, each `{5-bit property index, value}`. Indices
-    are absolute (class table order) but not emitted in sorted order.
-- The structure of the remaining entity blocks and the end-of-frame
-  terminator (observed `UBitVar 0` + 2 bits + garbage padding) is not fully
-  mapped. [unknown]
+  - `propCount` properties, each `{5-bit property index, value}`. Indices are absolute (class table order) but not emitted in sorted order.
+- The structure of the remaining entity blocks and the end-of-frame terminator (observed `UBitVar 0` + 2 bits + garbage padding) is not fully mapped. [unknown]
 
-About 3.7% of ticks in the sample are "empty" frames; around each one the
-position jumps by roughly one tick of velocity, suggesting those ticks were
-recorded without a player snapshot. [hypothesis]
+About 3.7% of ticks in the sample are "empty" frames; around each one the position jumps by roughly one tick of velocity, suggesting those ticks were recorded without a player snapshot. [hypothesis]
 
 ## Property encodings (CMomentumPlayer) [verified by oracle]
 
-Validated by decoding all 3386 frames: the recorded `m_vecVelocity` matches
-`(origin[t+1] - origin[t]) / tickInterval` within noise for 92% of ticks
-(remaining mismatches cluster at empty frames and one teleport-like event).
+Validated by decoding all 3386 frames: the recorded `m_vecVelocity` matches `(origin[t+1] - origin[t]) / tickInterval` within noise for 92% of ticks (remaining mismatches cluster at empty frames and one teleport-like event).
 
 | Index | Property               | Encoding                                                                            |
 | ----- | ---------------------- | ----------------------------------------------------------------------------------- |
@@ -248,53 +207,25 @@ Validated by decoding all 3386 frames: the recorded `m_vecVelocity` matches
 | 24    | m_nButtonsToggled      | 32-bit uint                                                                         |
 | 25    | m_fFlags               | 11-bit uint (FL_ONGROUND = 1, FL_CLIENT = 256)                                      |
 
-Eye pitch interpretation (raw 11-bit to degrees, likely range [-90, 90])
-still needs confirmation against known camera angles. [hypothesis]
+Eye pitch interpretation (raw 11-bit to degrees, likely range [-90, 90]) still needs confirmation against known camera angles. [hypothesis]
 
 ## Cross-check against the game's network tables [verified]
 
-The widths above were cross-checked against the server class tables dumped
-by the game itself (`sv_dump_class_table` in the 0.10 playtest build). Every
-empirically derived width matches the game's SendProp metadata:
-m_fEffects 15 bits, m_nModelIndex 13, m_angRotation QAngle 13,
-m_angEyeAngles 11-bit range floats, m_vecViewOffset 8/8/10-bit range floats,
-m_fFlags 11 bits, velocities and origin NOSCALE float32, entity handles
-23 bits (13-bit edict index), m_cellX/Y/Z 12 bits, m_cellbits 5,
-m_flSimulationTime and m_flAnimTime 8-bit ints encoded against the tick
-count, m_hViewModel an array prop.
+The widths above were cross-checked against the server class tables dumped by the game itself (`sv_dump_class_table` in the 0.10 playtest build). Every empirically derived width matches the game's SendProp metadata: m_fEffects 15 bits, m_nModelIndex 13, m_angRotation QAngle 13, m_angEyeAngles 11-bit range floats, m_vecViewOffset 8/8/10-bit range floats, m_fFlags 11 bits, velocities and origin NOSCALE float32, entity handles 23 bits (13-bit edict index), m_cellX/Y/Z 12 bits, m_cellbits 5, m_flSimulationTime and m_flAnimTime 8-bit ints encoded against the tick count, m_hViewModel an array prop.
 
-Note that the current build renames some classes (the sample replay's
-`CKnife` is `CMomentumKnife` today). Parsers must match classes and
-properties by the names stored in the replay, exactly like the game does
-(its own loader warns "Replay uses unknown prop" on mismatches).
+Note that the current build renames some classes (the sample replay's `CKnife` is `CMomentumKnife` today). Parsers must match classes and properties by the names stored in the replay, exactly like the game does (its own loader warns "Replay uses unknown prop" on mismatches).
 
-CFuncBrush baselines fully decode with these widths: a 22-bit record header
-after the class id, then all 11 properties with ascending 5-bit indices and
-cell-coordinate origin (3x 10 bits) landing exactly on the payload end for
-all 188 instances. [verified]
+CFuncBrush baselines fully decode with these widths: a 22-bit record header after the class id, then all 11 properties with ascending 5-bit indices and cell-coordinate origin (3x 10 bits) landing exactly on the payload end for all 188 instances. [verified]
 
 ## Empty frames [strong]
 
-About 3.7% of ticks carry a 4-byte frame: header 1, entity 0, flags `(0,1)`
-and no properties. Around each one the decoded position jumps by exactly one
-tick of velocity, so these are ticks recorded without a player snapshot
-(probably the recorder's update rate). Players should extrapolate or
-interpolate across them.
+About 3.7% of ticks carry a 4-byte frame: header 1, entity 0, flags `(0,1)` and no properties. Around each one the decoded position jumps by exactly one tick of velocity, so these are ticks recorded without a player snapshot (probably the recorder's update rate). Players should extrapolate or interpolate across them.
 
 ## Open questions
 
 - Baseline `tick` field semantics (275 vs -2468 in the sample).
-- Record header after the class id in baselines: the player's is 26 bits
-  (2 flag bits `(1,1)` then two UBitVar-shaped fields, values 56 and 27,
-  consistent with simulation and animation time deltas), CFuncBrush uses a
-  22-bit header starting `(0,0)`. The general rule is not yet pinned down.
-- The baseline layout of array props (m_hViewModel: 55 bits observed;
-  m_renderPoints and m_trackIds on zone regions).
-- Exact per-prop widths for CMomentumViewModel, CMomentumPistol and CKnife
-  in the sample's (older) build: today's table dump does not fully match,
-  so a replay recorded by the current build is needed to validate.
-- The leading 6-bit frame field (4 in normal frames, 1 in empty ones) and
-  the end-of-frame terminator (observed `UBitVar 0` + 2 bits + padding).
-- One isolated misread in the sample (tick 1140: a velocity component
-  decodes as -0.0 while the position clearly keeps moving), pointing at a
-  rare prop this parser does not size correctly yet.
+- Record header after the class id in baselines: the player's is 26 bits (2 flag bits `(1,1)` then two UBitVar-shaped fields, values 56 and 27, consistent with simulation and animation time deltas), CFuncBrush uses a 22-bit header starting `(0,0)`. The general rule is not yet pinned down.
+- The baseline layout of array props (m_hViewModel: 55 bits observed; m_renderPoints and m_trackIds on zone regions).
+- Exact per-prop widths for CMomentumViewModel, CMomentumPistol and CKnife in the sample's (older) build: today's table dump does not fully match, so a replay recorded by the current build is needed to validate.
+- The leading 6-bit frame field (4 in normal frames, 1 in empty ones) and the end-of-frame terminator (observed `UBitVar 0` + 2 bits + padding).
+- One isolated misread in the sample (tick 1140: a velocity component decodes as -0.0 while the position clearly keeps moving), pointing at a rare prop this parser does not size correctly yet.

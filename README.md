@@ -28,8 +28,7 @@ const body = decompressBody(data, header, bodyOffset);
 
 ## Format documentation
 
-The `.mtv` format is being reverse engineered and documented in
-[docs/FORMAT.md](docs/FORMAT.md), with a confidence level for every field.
+The `.mtv` format is being reverse engineered and documented in [docs/FORMAT.md](docs/FORMAT.md), with a confidence level for every field.
 
 ## Development
 
@@ -41,5 +40,4 @@ pnpm build
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Third party notices in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+MIT, see [LICENSE](LICENSE). Third party notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
