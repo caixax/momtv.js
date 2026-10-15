@@ -25,3 +25,14 @@ export {
   type CameraPose,
   type PlaybackEvents,
 } from './playback.js';
+export {
+  parseBsp,
+  parseEntitiesText,
+  type BspEntity,
+  type BspMap,
+  type BspMaterial,
+  type BspMeshGroup,
+  type BspModel,
+} from './bsp/bsp-file.js';
+export { MapRenderer, type RenderCamera } from './gl/map-renderer.js';
+export { createViewer, type LoadInput, type Viewer, type ViewerOptions } from './viewer.js';

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mtv.js drag and drop demo</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #10171d;
+        color: #e3ebf1;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+      }
+      #wrap {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      #bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 12px;
+        background: #18222b;
+        flex-wrap: wrap;
+      }
+      #bar button,
+      #bar select {
+        background: #243240;
+        color: inherit;
+        border: 1px solid #35485a;
+        border-radius: 4px;
+        padding: 4px 10px;
+        cursor: pointer;
+      }
+      #stage {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+      }
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #drop {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background: rgba(16, 23, 29, 0.92);
+      }
+      #drop.hidden {
+        display: none;
+      }
+      #hud {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        font-family: ui-monospace, monospace;
+        font-size: 13px;
+        background: rgba(0, 0, 0, 0.45);
+        padding: 6px 10px;
+        border-radius: 4px;
+        white-space: pre;
+      }
+      #seek {
+        flex: 1;
+        min-width: 160px;
+      }
+      .muted {
+        opacity: 0.65;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <div id="bar">
+        <button id="playpause">Play</button>
+        <input id="seek" type="range" min="0" max="1000" value="0" />
+        <span id="time" class="muted">0.000 / 0.000</span>
+        <select id="speed">
+          <option value="0.25">0.25x</option>
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+        </select>
+        <select id="camera">
+          <option value="firstperson" selected>First person</option>
+          <option value="thirdperson">Third person</option>
+          <option value="free">Free (WASD + click)</option>
+        </select>
+        <span id="status" class="muted">drop a .mtv and its .bsp</span>
+      </div>
+      <div id="stage">
+        <canvas id="canvas"></canvas>
+        <div id="drop">
+          <div>
+            <h2>Drop a replay (.mtv) and its map (.bsp) here</h2>
+            <p class="muted">
+              Both files at once or one after the other.<br />
+              The official API and CDN do not allow cross origin browser requests, so the map file
+              has to be provided here.
+            </p>
+          </div>
+        </div>
+        <div id="hud"></div>
+      </div>
+    </div>
+    <script type="module">
+      // When developing in this repo: pnpm build first, then serve the repo root,
+      // for example: npx serve . , and open /examples/drag-drop.html
+      import { createViewer } from '../packages/viewer/dist/index.js';
+
+      const canvas = document.getElementById('canvas');
+      const resize = () => {
+        canvas.width = canvas.clientWidth * devicePixelRatio;
+        canvas.height = canvas.clientHeight * devicePixelRatio;
+      };
+      new ResizeObserver(resize).observe(canvas);
+      resize();
+
+      const viewer = createViewer(canvas);
+      const drop = document.getElementById('drop');
+      const status = document.getElementById('status');
+      const hud = document.getElementById('hud');
+      const seek = document.getElementById('seek');
+      const time = document.getElementById('time');
+      const playpause = document.getElementById('playpause');
+
+      let replayBytes = null;
+      let mapBytes = null;
+      let seeking = false;
+
+      async function tryLoad() {
+        if (!replayBytes || !mapBytes) {
+          status.textContent = replayBytes
+            ? 'got the replay, drop the .bsp'
+            : mapBytes
+              ? 'got the map, drop the .mtv'
+              : 'drop a .mtv and its .bsp';
+          return;
+        }
+        status.textContent = 'loading...';
+        try {
+          await viewer.load({ replay: replayBytes, map: mapBytes });
+          drop.classList.add('hidden');
+          const h = viewer.replay.header;
+          status.textContent = `${h.mapName} | ${h.playerName} | ${h.runTime.toFixed(3)}s`;
+          viewer.play();
+          playpause.textContent = 'Pause';
+        } catch (error) {
+          status.textContent = 'error: ' + error.message;
+        }
+      }
+
+      addEventListener('dragover', (e) => e.preventDefault());
+      addEventListener('drop', async (e) => {
+        e.preventDefault();
+        for (const file of e.dataTransfer.files) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          if (file.name.endsWith('.bsp')) mapBytes = bytes;
+          else replayBytes = bytes;
+        }
+        tryLoad();
+      });
+
+      playpause.addEventListener('click', () => {
+        const clock = viewer.clock;
+        if (!clock) return;
+        if (clock.playing) {
+          viewer.pause();
+          playpause.textContent = 'Play';
+        } else {
+          viewer.play();
+          playpause.textContent = 'Pause';
+        }
+      });
+      document
+        .getElementById('speed')
+        .addEventListener('change', (e) => viewer.setSpeed(Number(e.target.value)));
+      document
+        .getElementById('camera')
+        .addEventListener('change', (e) => viewer.setCamera(e.target.value));
+      seek.addEventListener('input', () => {
+        seeking = true;
+        const clock = viewer.clock;
+        if (clock) viewer.seek((seek.value / 1000) * clock.duration);
+        seeking = false;
+      });
+
+      viewer.onTick((state) => {
+        const clock = viewer.clock;
+        if (!clock) return;
+        if (!seeking) seek.value = String(Math.round((clock.time / clock.duration) * 1000));
+        time.textContent = `${clock.time.toFixed(3)} / ${clock.duration.toFixed(3)}`;
+        const speed = Math.hypot(state.velocity[0], state.velocity[1]);
+        hud.textContent = `tick ${state.tick}\nspeed ${speed.toFixed(0)} u/s\npos ${state.origin.map((v) => v.toFixed(0)).join(' ')}`;
+      });
+    </script>
+  </body>
+</html>
