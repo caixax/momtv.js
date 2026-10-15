@@ -219,51 +219,82 @@ Validated by decoding all 3386 frames: the recorded `m_vecVelocity` matches
 `(origin[t+1] - origin[t]) / tickInterval` within noise for 92% of ticks
 (remaining mismatches cluster at empty frames and one teleport-like event).
 
-| Index | Property               | Encoding                                                     |
-| ----- | ---------------------- | ------------------------------------------------------------ |
-| 0     | m_bSimulatedEveryTick  | 1 bit                                                        |
-| 1     | m_fEffects             | 15-bit uint [hypothesis: width may be off; value 8 observed] |
-| 2     | m_vecOrigin            | 2x float32 (x, y) raw                                        |
-| 3     | m_vecOrigin[2]         | float32 raw                                                  |
-| 4     | m_vecMinsPreScaled     | 3x float32                                                   |
-| 5     | m_vecMaxsPreScaled     | 3x float32                                                   |
-| 6     | m_nModelIndex          | 13-bit uint                                                  |
-| 7     | m_nBody                | 32-bit int                                                   |
-| 8     | m_clrModelPrimary      | 32-bit uint (RGBA)                                           |
-| 9     | m_clrModelSecondary    | 32-bit uint (RGBA)                                           |
-| 10    | m_angRotation          | 3x 13-bit fixed point angle, degrees = v * 360 / 8192        |
-| 11    | m_angEyeAngles[0]      | 11-bit scaled float (range encoding) [strong]                |
-| 12    | m_angEyeAngles[1]      | 11-bit scaled float, degrees = v * 360 / 2048 [strong]       |
-| 13    | m_bClientSideAnimation | 1 bit                                                        |
-| 14    | m_vecViewOffset[0]     | 8-bit scaled float, -32 + v * 64 / 256                       |
-| 15    | m_vecViewOffset[1]     | 8-bit scaled float, -32 + v * 64 / 256                       |
-| 16    | m_vecViewOffset[2]     | 10-bit scaled float, v * 128 / 1024 (64.0 standing)          |
-| 17    | m_hViewModel           | 21-bit entity handle (11-bit index + 10-bit serial) [strong] |
-| 18    | m_vecVelocity[0]       | float32 raw                                                  |
-| 19    | m_vecVelocity[1]       | float32 raw                                                  |
-| 20    | m_vecVelocity[2]       | float32 raw                                                  |
-| 21    | m_nPhysicalButtons     | 32-bit uint (IN_* bits)                                      |
-| 22    | m_afButtonDisabled     | 32-bit uint                                                  |
-| 23    | m_afButtonForced       | 32-bit uint                                                  |
-| 24    | m_nButtonsToggled      | 32-bit uint                                                  |
-| 25    | m_fFlags               | 11-bit uint (FL_ONGROUND = 1, FL_CLIENT = 256)               |
+| Index | Property               | Encoding                                                                            |
+| ----- | ---------------------- | ----------------------------------------------------------------------------------- |
+| 0     | m_bSimulatedEveryTick  | 1 bit                                                                               |
+| 1     | m_fEffects             | 15-bit uint (confirmed by network table dump)                                       |
+| 2     | m_vecOrigin            | 2x float32 (x, y) raw                                                               |
+| 3     | m_vecOrigin[2]         | float32 raw                                                                         |
+| 4     | m_vecMinsPreScaled     | 3x float32                                                                          |
+| 5     | m_vecMaxsPreScaled     | 3x float32                                                                          |
+| 6     | m_nModelIndex          | 13-bit uint                                                                         |
+| 7     | m_nBody                | 32-bit int                                                                          |
+| 8     | m_clrModelPrimary      | 32-bit uint (RGBA)                                                                  |
+| 9     | m_clrModelSecondary    | 32-bit uint (RGBA)                                                                  |
+| 10    | m_angRotation          | 3x 13-bit fixed point angle, degrees = v * 360 / 8192                               |
+| 11    | m_angEyeAngles[0]      | 11-bit scaled float (range encoding) [strong]                                       |
+| 12    | m_angEyeAngles[1]      | 11-bit scaled float, degrees = v * 360 / 2048 [strong]                              |
+| 13    | m_bClientSideAnimation | 1 bit                                                                               |
+| 14    | m_vecViewOffset[0]     | 8-bit scaled float, -32 + v * 64 / 256                                              |
+| 15    | m_vecViewOffset[1]     | 8-bit scaled float, -32 + v * 64 / 256                                              |
+| 16    | m_vecViewOffset[2]     | 10-bit scaled float, v * 128 / 1024 (64.0 standing)                                 |
+| 17    | m_hViewModel           | frames: 23-bit entity handle (13-bit index + serial); baselines: array, layout open |
+| 18    | m_vecVelocity[0]       | float32 raw                                                                         |
+| 19    | m_vecVelocity[1]       | float32 raw                                                                         |
+| 20    | m_vecVelocity[2]       | float32 raw                                                                         |
+| 21    | m_nPhysicalButtons     | 32-bit uint (IN_* bits)                                                             |
+| 22    | m_afButtonDisabled     | 32-bit uint                                                                         |
+| 23    | m_afButtonForced       | 32-bit uint                                                                         |
+| 24    | m_nButtonsToggled      | 32-bit uint                                                                         |
+| 25    | m_fFlags               | 11-bit uint (FL_ONGROUND = 1, FL_CLIENT = 256)                                      |
 
 Eye pitch interpretation (raw 11-bit to degrees, likely range [-90, 90])
 still needs confirmation against known camera angles. [hypothesis]
 
-Other classes (CMomentumViewModel, CMomentumPistol, CKnife,
-CMomentumZoneRegion, CFuncBrush) have partially mapped encodings:
-CFuncBrush confirmed so far: m_nModelIndex 13 bits, m_nRenderMode 8 bits,
-m_clrRender 32 bits, m_angRotation 3x13 bits. [strong]
+## Cross-check against the game's network tables [verified]
+
+The widths above were cross-checked against the server class tables dumped
+by the game itself (`sv_dump_class_table` in the 0.10 playtest build). Every
+empirically derived width matches the game's SendProp metadata:
+m_fEffects 15 bits, m_nModelIndex 13, m_angRotation QAngle 13,
+m_angEyeAngles 11-bit range floats, m_vecViewOffset 8/8/10-bit range floats,
+m_fFlags 11 bits, velocities and origin NOSCALE float32, entity handles
+23 bits (13-bit edict index), m_cellX/Y/Z 12 bits, m_cellbits 5,
+m_flSimulationTime and m_flAnimTime 8-bit ints encoded against the tick
+count, m_hViewModel an array prop.
+
+Note that the current build renames some classes (the sample replay's
+`CKnife` is `CMomentumKnife` today). Parsers must match classes and
+properties by the names stored in the replay, exactly like the game does
+(its own loader warns "Replay uses unknown prop" on mismatches).
+
+CFuncBrush baselines fully decode with these widths: a 22-bit record header
+after the class id, then all 11 properties with ascending 5-bit indices and
+cell-coordinate origin (3x 10 bits) landing exactly on the payload end for
+all 188 instances. [verified]
+
+## Empty frames [strong]
+
+About 3.7% of ticks carry a 4-byte frame: header 1, entity 0, flags `(0,1)`
+and no properties. Around each one the decoded position jumps by exactly one
+tick of velocity, so these are ticks recorded without a player snapshot
+(probably the recorder's update rate). Players should extrapolate or
+interpolate across them.
 
 ## Open questions
 
 - Baseline `tick` field semantics (275 vs -2468 in the sample).
-- The 2-bit flags field after entity/class ids: observed values vary by
-  class and context; `(1,1)` on the player baseline precedes two extra
-  UBitVar fields.
-- Exact layout of non-player entity blocks in keyframes and frames, and the
-  end-of-frame terminator.
-- Empty frame semantics (dropped snapshots vs intentional).
-- m_fEffects width (7 vs 15 bits both fit the single sample seen).
-- Zone region property encodings (m_renderPoints array format).
+- Record header after the class id in baselines: the player's is 26 bits
+  (2 flag bits `(1,1)` then two UBitVar-shaped fields, values 56 and 27,
+  consistent with simulation and animation time deltas), CFuncBrush uses a
+  22-bit header starting `(0,0)`. The general rule is not yet pinned down.
+- The baseline layout of array props (m_hViewModel: 55 bits observed;
+  m_renderPoints and m_trackIds on zone regions).
+- Exact per-prop widths for CMomentumViewModel, CMomentumPistol and CKnife
+  in the sample's (older) build: today's table dump does not fully match,
+  so a replay recorded by the current build is needed to validate.
+- The leading 6-bit frame field (4 in normal frames, 1 in empty ones) and
+  the end-of-frame terminator (observed `UBitVar 0` + 2 bits + padding).
+- One isolated misread in the sample (tick 1140: a velocity component
+  decodes as -0.0 while the position clearly keeps moving), pointing at a
+  rare prop this parser does not size correctly yet.

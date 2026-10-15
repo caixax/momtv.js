@@ -44,7 +44,7 @@ const PLAYER = {
   14: (r) => ['viewOffsetX', -32 + (r.readBits(8) * 64) / 256],
   15: (r) => ['viewOffsetY', -32 + (r.readBits(8) * 64) / 256],
   16: (r) => ['viewOffsetZ', (r.readBits(10) * 128) / 1024],
-  17: (r) => ['hViewModel', r.readBits(21)],
+  17: (r) => ['hViewModel', r.readBits(23)],
   18: (r) => {
     const v = f32(r);
     return plausibleVel(v) ? ['velX', v] : null;
@@ -152,7 +152,7 @@ for (let tick = 0; tick < FRAME_COUNT; tick++) {
   if (parsed) {
     if (parsed.empty) {
       empties++;
-      if (emptyTicks.length < 40) emptyTicks.push(tick);
+      emptyTicks.push(tick);
     }
     frames.push({ tick, offset, props: parsed.props });
     const nextKf = KF_FRAME_OFFS.get(tick + 1);
@@ -183,7 +183,6 @@ for (let tick = 0; tick < FRAME_COUNT; tick++) {
   }
 }
 
-console.log('empty ticks:', emptyTicks.join(','));
 console.log(
   `parsed ${frames.length}/${FRAME_COUNT} frames, zone rescues: ${rescued}, empty frames: ${empties}`,
 );
@@ -234,14 +233,26 @@ for (let i = 1; i < track.length; i++) {
     if (err > maxErr) maxErr = err;
     if (err > 1.0) {
       oracleFails++;
-      if (failTicks.length < 30) failTicks.push(`${cur.tick}:${err.toFixed(2)}`);
+      failTicks.push(cur.tick);
     }
   }
 }
 console.log(
   `velocity oracle: ${oracleChecks} checks, ${oracleFails} fails (>1 unit), max err ${maxErr.toFixed(4)}`,
 );
-if (failTicks.length) console.log('fail ticks:', failTicks.join(' '));
+{
+  const emptySet = new Set(emptyTicks);
+  let near = 0;
+  const far = [];
+  for (const t of failTicks) {
+    let isNear = false;
+    for (let d = -4; d <= 4; d++) if (emptySet.has(t + d)) isNear = true;
+    if (isNear) near++;
+    else far.push(t);
+  }
+  console.log('fails near an empty frame (+-4 ticks):', near, '/', failTicks.length);
+  console.log('fails far from empties:', far.join(','));
+}
 console.log('first:', JSON.stringify(track[0]));
 console.log('last:', JSON.stringify(track[track.length - 1]));
 
