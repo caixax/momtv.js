@@ -1,0 +1,31 @@
+{
+  "name": "@caixax/mtv-cli",
+  "version": "0.0.0",
+  "description": "Command line tools for Momentum Mod replays (.mtv): inspect headers, splits and export trajectories",
+  "author": "caixax <westlargo@proton.me>",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "mtv-dump": "./dist/mtv-dump.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@caixax/mtv": "workspace:*"
+  },
+  "keywords": [
+    "momentum-mod",
+    "replay",
+    "mtv",
+    "cli"
+  ]
+}
