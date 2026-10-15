@@ -27,6 +27,8 @@ export default tseslint.config(
         console: 'readonly',
         Buffer: 'readonly',
         URL: 'readonly',
+        TextDecoder: 'readonly',
+        TextEncoder: 'readonly',
       },
     },
   },

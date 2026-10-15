@@ -1,0 +1,269 @@
+# MomentumTV replay format (.mtv)
+
+Reverse engineered specification of the Momentum Mod replay format, version 2,
+as written by Momentum Mod 0.10.x (Strata Source).
+
+Every field is annotated with a confidence level:
+
+- **[verified]**: confirmed against the official reader, or validated by an
+  independent oracle (for example, decoded velocity matching per-tick position
+  deltas across thousands of frames).
+- **[strong]**: consistent with all observed data, no oracle contradicts it.
+- **[hypothesis]**: plausible interpretation, needs more samples or game
+  knowledge to confirm.
+- **[unknown]**: structure or meaning not yet understood.
+
+Primary sources: the official header/splits reader in momentum-mod/website
+(`libs/formats/replay`, MIT), the official sample replay (bhop_eazy), and
+byte and bit level analysis of that sample. Everything below the splits block
+was reverse engineered from data; nothing here is derived from game code.
+
+## File layout
+
+| Section         | Size                            |
+| --------------- | ------------------------------- |
+| Fixed header    | 195 bytes                       |
+| Run splits      | 4 bytes length + JSON           |
+| Compressed body | Valve LZMA frame to end of file |
+
+All integers little endian. The C++ struct is packed (`#pragma pack(1)`).
+
+## Fixed header (195 bytes) [verified]
+
+| Offset | Type     | Field             | Notes                                     |
+| ------ | -------- | ----------------- | ----------------------------------------- |
+| 0      | int32    | magic             | `'MMTV'` = 0x56544D4D                     |
+| 4      | int32    | formatVersion     | 2                                         |
+| 8      | int64    | timestamp         | Unix ms when the file was written         |
+| 16     | char[64] | mapName           | NUL terminated                            |
+| 80     | char[41] | mapHash           | SHA1 hex of the BSP                       |
+| 121    | uint8    | gamemode          | see Gamemode enum                         |
+| 122    | uint8    | compression       | 0 = none, 1 = Valve LZMA                  |
+| 123    | float    | tickInterval      | seconds per tick                          |
+| 127    | uint64   | playerSteamID     | SteamID64                                 |
+| 135    | char[32] | playerName        | NUL terminated                            |
+| 167    | uint8    | trackType         | 0 main, 1 stage, 2 bonus                  |
+| 168    | uint8    | trackNum          | 1-based                                   |
+| 169    | double   | runTime           | final time in seconds                     |
+| 177    | int32    | frameCount        | delta frames in the body                  |
+| 181    | int32    | keyFrameCount     | keyframes in the body                     |
+| 185    | int32    | baselineCount     | entity baselines in the body              |
+| 189    | uint8    | classCount        | entries in the class table                |
+| 190    | uint8    | tempEntClassCount | entries in the temp entity class table    |
+| 191    | uint8    | sampleCount       | entries in the sound table                |
+| 192    | uint8    | propBits          | bits per property index (5 in the sample) |
+| 193    | uint8    | tempEntClassBits  | bits per temp entity class index          |
+| 194    | uint8    | style             | see Style enum                            |
+
+The official reader stops at `style` and leaves the counter fields
+commented out; their meaning here was confirmed by using them to parse the
+body (every counter matches the decoded structure exactly). [verified]
+
+## Run splits [verified]
+
+At offset 195: `int32 length`, then `length` bytes holding UTF-8 JSON whose
+final byte is a NUL terminator. The JSON is `{trackStats, segments[]}` as
+modeled by momentum-mod/website (`RunSplits`).
+
+## Compressed body [verified]
+
+Immediately after the splits: Valve `lzma_header_t` framing:
+
+| Offset | Type            | Field                                       |
+| ------ | --------------- | ------------------------------------------- |
+| 0      | uint32          | id, `'LZMA'` = 0x414D5A4C                   |
+| 4      | uint32          | actualSize (decompressed)                   |
+| 8      | uint32          | lzmaSize (compressed payload size)          |
+| 12     | uint8[5]        | LZMA properties (lc/lp/pb byte + dict size) |
+| 17     | uint8[lzmaSize] | raw LZMA stream                             |
+
+The sample decompresses to exactly `actualSize` = 156756 bytes. [verified]
+
+## Decompressed body
+
+Sections in order:
+
+1. Event timeline
+2. Networked class table
+3. Sound table
+4. Game event definitions (protobuf)
+5. Baselines (byte size prefixed)
+6. Keyframe index
+7. Keyframe data (byte size prefixed)
+8. Frame data (byte size prefixed)
+
+### Bit stream conventions [verified]
+
+Bit-packed data uses Source engine `bf_read`/`bf_write` semantics:
+little endian, LSB-first within each byte. `UBitVar` is the CS:GO/Strata
+variant: 6 bits are read, the top 2 of those 6 select an extension:
+
+- `(six & 48) == 0`: value = six (0..15)
+- `== 16`: value = (six & 15) | readBits(4) << 4
+- `== 32`: value = (six & 15) | readBits(8) << 4
+- `== 48`: value = (six & 15) | readBits(28) << 4
+
+### 1. Event timeline [strong]
+
+`uint32 count`, then `count` records of 18 bytes:
+
+| Offset | Type   | Field    | Notes                                                                                             |
+| ------ | ------ | -------- | ------------------------------------------------------------------------------------------------- |
+| 0      | int32  | tick     | replay tick of the event                                                                          |
+| 4      | uint16 | zoneFlag | observed 0..3; 2 appears to be zone enter, 3 zone exit [hypothesis]                               |
+| 6      | uint8  | trackNum | matches header trackNum                                                                           |
+| 7      | uint8  | type     | 1 once at tick 0, 2 for mid-run events, 3 once at the final tick [hypothesis: start/split/finish] |
+| 8      | double | time     | run timer at the event; equals (tick - startTick + 0.5) * tickInterval                            |
+| 16     | uint8  | majorNum | segment number                                                                                    |
+| 17     | uint8  | minorNum | checkpoint number                                                                                 |
+
+In the sample the final record's `time` equals the header `runTime` exactly,
+and the event ticks match the keyframe index ticks one to one. [verified]
+
+### 2. Class table [verified]
+
+`classCount` records, each:
+
+- `uint8 classId`: network class id (not contiguous: 0, 1, 2, 10, 31, 35 in
+  the sample)
+- `char[] className` NUL terminated
+- `uint8 propCount`
+- `propCount` NUL terminated property names
+
+Property order in this table defines the property index used in all
+bit-packed entity data. Property value encodings are not stored; they are
+implied by the game's network tables (see "Property encodings").
+
+### 3. Sound table [strong]
+
+`sampleCount` records, each `uint16 soundIndex` + NUL terminated path.
+
+### 4. Game event definitions [verified]
+
+`uint32 size`, then `size` bytes of protobuf resembling
+`CSVCMsg_GameEventList`: repeated descriptors
+`{ varint eventId; string name; repeated { varint type; string key } }`.
+The sample defines player_jumped, player_landed, ramp_board, ramp_leave,
+slide_started, slide_ended, player_explosive_hit.
+
+### 5. Baselines [strong]
+
+`uint32 sectionSize`, then `baselineCount` records, byte aligned:
+
+- `int32 tick`: 275 for every record in the sample except the last zone
+  region, which has -2468. Meaning unclear. [unknown]
+- varint (protobuf style): entity ordinal, contiguous 0..baselineCount-1
+- bit-packed payload, padded with zero bits to the next byte boundary
+
+Payload:
+
+- `UBitVar classId` (matches the class table)
+- 2 bits: field flags. Observed `(1,1)` for the player followed by two
+  UBitVar values (56 and 27 in the sample; probably simulation and animation
+  time) [hypothesis]. Other classes use other values; layout after the flags
+  is not fully mapped for every class. [unknown]
+- All properties of the class, each as `propBits`-bit property index
+  (table order, ascending) followed by the type-specific value.
+- Zero padding to byte boundary (less than 8 bits).
+
+The player baseline in the sample parses exactly to its payload end with the
+property encodings below. [verified]
+
+### 6. Keyframe index [verified]
+
+`keyFrameCount` records of 12 bytes:
+`{ uint32 tick, uint32 keyframeDataOffset, uint32 frameDataOffset }`.
+
+- `tick`: keyframes are written at every timeline event tick.
+- `keyframeDataOffset`: byte offset of this keyframe inside section 7.
+- `frameDataOffset`: byte offset inside section 8 of the frame for
+  `tick + 1` (resume point when seeking to this keyframe).
+
+### 7. Keyframe data [strong]
+
+`uint32 size`, then the keyframes back to back. A keyframe is a delta
+against the baselines: a leading 6-bit count-like value [hypothesis], then
+entity blocks. Non-player blocks are not fully mapped. The player block is:
+
+- 6 bits entity field (0 for the player)
+- 2 bits flags (observed 0)
+- properties until the block ends, each `{5-bit index, value}`; only
+  properties that differ from the baseline are present.
+
+### 8. Frame data [verified for the player block]
+
+`uint32 size`, then one frame per tick (`frameCount` frames), byte aligned.
+
+Frame:
+
+- 6 bits: count-like header, 4 in every normal frame of the sample, 1 in
+  sparse "empty" frames [hypothesis: number of entity blocks]
+- entity blocks. The first block is the player:
+  - `UBitVar entity` (0)
+  - 2 bits flags: `(0,0)` = property list follows; `(0,1)` = empty update,
+    no further player data this tick [strong]
+  - `UBitVar propCount`
+  - `propCount` properties, each `{5-bit property index, value}`. Indices
+    are absolute (class table order) but not emitted in sorted order.
+- The structure of the remaining entity blocks and the end-of-frame
+  terminator (observed `UBitVar 0` + 2 bits + garbage padding) is not fully
+  mapped. [unknown]
+
+About 3.7% of ticks in the sample are "empty" frames; around each one the
+position jumps by roughly one tick of velocity, suggesting those ticks were
+recorded without a player snapshot. [hypothesis]
+
+## Property encodings (CMomentumPlayer) [verified by oracle]
+
+Validated by decoding all 3386 frames: the recorded `m_vecVelocity` matches
+`(origin[t+1] - origin[t]) / tickInterval` within noise for 92% of ticks
+(remaining mismatches cluster at empty frames and one teleport-like event).
+
+| Index | Property               | Encoding                                                     |
+| ----- | ---------------------- | ------------------------------------------------------------ |
+| 0     | m_bSimulatedEveryTick  | 1 bit                                                        |
+| 1     | m_fEffects             | 15-bit uint [hypothesis: width may be off; value 8 observed] |
+| 2     | m_vecOrigin            | 2x float32 (x, y) raw                                        |
+| 3     | m_vecOrigin[2]         | float32 raw                                                  |
+| 4     | m_vecMinsPreScaled     | 3x float32                                                   |
+| 5     | m_vecMaxsPreScaled     | 3x float32                                                   |
+| 6     | m_nModelIndex          | 13-bit uint                                                  |
+| 7     | m_nBody                | 32-bit int                                                   |
+| 8     | m_clrModelPrimary      | 32-bit uint (RGBA)                                           |
+| 9     | m_clrModelSecondary    | 32-bit uint (RGBA)                                           |
+| 10    | m_angRotation          | 3x 13-bit fixed point angle, degrees = v * 360 / 8192        |
+| 11    | m_angEyeAngles[0]      | 11-bit scaled float (range encoding) [strong]                |
+| 12    | m_angEyeAngles[1]      | 11-bit scaled float, degrees = v * 360 / 2048 [strong]       |
+| 13    | m_bClientSideAnimation | 1 bit                                                        |
+| 14    | m_vecViewOffset[0]     | 8-bit scaled float, -32 + v * 64 / 256                       |
+| 15    | m_vecViewOffset[1]     | 8-bit scaled float, -32 + v * 64 / 256                       |
+| 16    | m_vecViewOffset[2]     | 10-bit scaled float, v * 128 / 1024 (64.0 standing)          |
+| 17    | m_hViewModel           | 21-bit entity handle (11-bit index + 10-bit serial) [strong] |
+| 18    | m_vecVelocity[0]       | float32 raw                                                  |
+| 19    | m_vecVelocity[1]       | float32 raw                                                  |
+| 20    | m_vecVelocity[2]       | float32 raw                                                  |
+| 21    | m_nPhysicalButtons     | 32-bit uint (IN_* bits)                                      |
+| 22    | m_afButtonDisabled     | 32-bit uint                                                  |
+| 23    | m_afButtonForced       | 32-bit uint                                                  |
+| 24    | m_nButtonsToggled      | 32-bit uint                                                  |
+| 25    | m_fFlags               | 11-bit uint (FL_ONGROUND = 1, FL_CLIENT = 256)               |
+
+Eye pitch interpretation (raw 11-bit to degrees, likely range [-90, 90])
+still needs confirmation against known camera angles. [hypothesis]
+
+Other classes (CMomentumViewModel, CMomentumPistol, CKnife,
+CMomentumZoneRegion, CFuncBrush) have partially mapped encodings:
+CFuncBrush confirmed so far: m_nModelIndex 13 bits, m_nRenderMode 8 bits,
+m_clrRender 32 bits, m_angRotation 3x13 bits. [strong]
+
+## Open questions
+
+- Baseline `tick` field semantics (275 vs -2468 in the sample).
+- The 2-bit flags field after entity/class ids: observed values vary by
+  class and context; `(1,1)` on the player baseline precedes two extra
+  UBitVar fields.
+- Exact layout of non-player entity blocks in keyframes and frames, and the
+  end-of-frame terminator.
+- Empty frame semantics (dropped snapshots vs intentional).
+- m_fEffects width (7 vs 15 bits both fit the single sample seen).
+- Zone region property encodings (m_renderPoints array format).
