@@ -2,7 +2,7 @@
 
 Read Momentum Mod replays (`.mtv`, MomentumTV) and play them back in the browser on top of the real map.
 
-> Work in progress. The parser (header, splits, body decompression) works today; the frame decoder, viewer and drop-in player are under active development. This project is unofficial and not affiliated with Momentum Mod, Strata Source or Valve.
+> Work in progress. The parser works today (header, splits, events and the full per-tick player trajectory); the viewer and the drop-in player are under active development. This project is unofficial and not affiliated with Momentum Mod, Strata Source or Valve.
 
 ## Packages
 
@@ -16,14 +16,27 @@ Read Momentum Mod replays (`.mtv`, MomentumTV) and play them back in the browser
 ## Quick start (parser)
 
 ```ts
-import { readHeader, readSplits, decompressBody } from '@caixax/mtv';
+import { parseReplay, readHeader } from '@caixax/mtv';
 
 const data = new Uint8Array(await file.arrayBuffer());
+
+// cheap: header only, no decompression (useful for listings)
 const header = readHeader(data);
 console.log(header.mapName, header.playerName, header.runTime);
 
-const { splits, bodyOffset } = readSplits(data);
-const body = decompressBody(data, header, bodyOffset);
+// full parse: splits, events, classes and the per-tick player track
+const replay = parseReplay(data);
+console.log(replay.events); // zone and timer events
+const state = replay.getPlayerState(1500); // { origin, eyeAngles, velocity, buttons, ... }
+const track = replay.toTrack(); // compact typed arrays for playback
+```
+
+Or from the command line:
+
+```sh
+mtv-dump run.mtv            # header, splits, events, decode summary
+mtv-dump run.mtv --csv      # per-tick trajectory for spreadsheets
+mtv-dump run.mtv --json     # full decoded track as JSON
 ```
 
 ## Format documentation
