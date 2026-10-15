@@ -1,0 +1,7 @@
+dist/
+coverage/
+refs/
+tools/out/
+fixtures/
+pnpm-lock.yaml
+CHANGELOG.md

@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.mtv binary
+*.bsp binary
+*.png binary
+*.jpg binary
+*.gif binary
