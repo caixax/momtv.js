@@ -9,6 +9,8 @@ This project is unofficial and is not affiliated with Momentum Mod, Strata Sourc
 - Copyright (c) Momentum Mod team
 - License: MIT (see https://github.com/momentum-mod/website/blob/main/LICENSE)
 
+`fixtures/bhop_badwater.momtv` was recorded by caixax on a Momentum Mod 0.10 playtest build and is committed with the author's permission.
+
 ## Format knowledge references
 
 The `.mtv` header and splits layout was ported from the TypeScript reader in momentum-mod/website (`libs/formats/replay/`), MIT licensed. The port in this repository is an independent implementation on DataView.
