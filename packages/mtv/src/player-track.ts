@@ -518,13 +518,15 @@ export function decodePlayerTrack(
 
     if (next === -1) {
       if (tick < frameCount - 1) {
-        // cannot find the next frame: stop here, remaining ticks keep the
-        // last state (recorded in stats as lost)
-        stats.lostFrames += frameCount - 1 - tick;
+        // cannot find the next frame: stop here and hold the last state for
+        // the remaining ticks, counting every one of them as lost so the
+        // track still has one entry per tick and the stats stay honest
         for (let t = tick + 1; t < frameCount; t++) {
           data.copyWithin(t * STRIDE, o, o + STRIDE);
           buttons[t] = state.buttons;
           flags[t] = state.flags;
+          stats.lostFrames++;
+          stats.frames++;
         }
       }
       break;

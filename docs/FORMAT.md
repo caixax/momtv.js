@@ -234,6 +234,17 @@ Replays written by current 0.10.x playtest builds keep formatVersion 2 in the he
 
 Oracle note: on maps with push physics (boosters, bumpers, conveyors) the recorded m_vecVelocity legitimately disagrees with per-tick position deltas while the push is acting, since base velocity is not part of the recorded property set. Plain bhop runs validate at over 99%.
 
+## Frame location and its limits [verified by measurement]
+
+Only the leading player block of a frame is decoded; the trailing entity blocks (viewmodel, weapons, zones, map entities) are not mapped, so a frame's true end is unknown and the next frame has to be located rather than computed. Two measurements bound how well that can work:
+
+- Candidate density: in the first 4000 bytes of bhop_badwater there are 203 byte offsets that parse as a valid player block, for about 100 real frames. Roughly half of the candidates are frame-shaped runs of bits inside the trailing blocks.
+- The position is the discriminator: of those 203 candidates only 80 carry `m_vecOrigin`, which matches the real frame count closely. Walking a span taking only position-bearing candidates reproduces the known spans almost exactly (a 15 tick span between two keyframe anchors places exactly 15 frames and ends on the anchor byte; a 1041 tick span places 1026).
+
+Two facts make the frame count checkable: the keyframe index pins known ticks to known byte offsets, so between two anchors both the tick count and the byte range are exact.
+
+What remains before playback can be bit exact: the entity to class mapping (in revision 1 it comes from the baselines, in revision 2 it is folded into the tick 0 keyframe, which is not parsed yet) and the per class property encodings for the non-player classes. With those, every block of a frame can be decoded and frames become exactly contiguous, removing the need to locate them. Replays where the player is not the first recorded entity (observed on entity-heavy maps such as a defrag pinball map) cannot be decoded at all until then.
+
 ## Open questions
 
 - Baseline `tick` field semantics (275 vs -2468 in the sample).
