@@ -160,19 +160,19 @@ The player baseline in the sample parses exactly to its payload end with the pro
 
 ### 8. Frame data [verified for the player block]
 
-`uint32 size`, then one frame per tick (`frameCount` frames), byte aligned.
+`uint32 size`, then exactly one frame per tick (`frameCount` frames), byte aligned and stored back to back with no gaps. [verified: walking player blocks start to start covers the whole section and matches every keyframe anchor]
 
 Frame:
 
-- 6 bits: count-like header, 4 in every normal frame of the sample, 1 in sparse "empty" frames [hypothesis: number of entity blocks]
-- entity blocks. The first block is the player:
+- 6 bits: number of entity blocks in the frame. Constant for a replay (4 in the sample: player, viewmodel and the two weapons) except on ticks where extra entities update, where it grows accordingly (5 and 6 observed). [verified]
+- entity blocks. The first block is always the player:
   - `UBitVar entity` (0)
-  - 2 bits flags: `(0,0)` = property list follows; `(0,1)` = empty update, no further player data this tick [strong]
+  - 2 bits flags (0 in every player frame block)
   - `UBitVar propCount`
-  - `propCount` properties, each `{5-bit property index, value}`. Indices are absolute (class table order) but not emitted in sorted order.
-- The structure of the remaining entity blocks and the end-of-frame terminator (observed `UBitVar 0` + 2 bits + garbage padding) is not fully mapped. [unknown]
+  - `propCount` properties, each `{5-bit property index, value}`. Indices are absolute (class table order) but not emitted in sorted order (changes-often properties first). [verified]
+- the remaining blocks (viewmodel, weapons, occasionally zones) follow the player block; their property encodings are partially mapped, so this parser walks frame to frame by locating the next player block instead of decoding them. Some frames embed an event or sound message (a protobuf blob with a leading `0x11` byte and a length) in this trailing region. [hypothesis]
 
-About 3.7% of ticks in the sample are "empty" frames; around each one the position jumps by roughly one tick of velocity, suggesting those ticks were recorded without a player snapshot. [hypothesis]
+The decoded trajectory contains three teleport-scale discontinuities in the sample; these are real (bhop_eazy teleports the player between segments) and line up with the zone events. A handful of isolated ticks (about 1%) decode with a one tick position jump, still under investigation.
 
 ## Property encodings (CMomentumPlayer) [verified by oracle]
 

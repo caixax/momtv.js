@@ -39,6 +39,12 @@ importers:
         specifier: ^4.0.18
         version: 4.1.11(@types/node@24.19.2)(@vitest/coverage-v8@4.1.11)(vite@8.3.4(@types/node@24.19.2)(esbuild@0.27.7))
 
+  packages/cli:
+    dependencies:
+      '@caixax/mtv':
+        specifier: workspace:*
+        version: link:../mtv
+
   packages/mtv: {}
 
 packages:

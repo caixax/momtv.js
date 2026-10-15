@@ -34,3 +34,23 @@ export {
 export { decompressBody, VALVE_LZMA_ID } from './body.js';
 export { lzmaDecompress, decodeLzmaProperties, type LzmaProperties } from './lzma.js';
 export { ByteReader } from './byte-reader.js';
+export { BitReader } from './bit-reader.js';
+export {
+  parseBody,
+  type BaselineRecord,
+  type GameEventDef,
+  type KeyframeIndexEntry,
+  type ReplayBody,
+  type ReplayClass,
+  type ReplaySound,
+  type TimelineEvent,
+} from './body-sections.js';
+export {
+  decodePlayerTrack,
+  trackStateAt,
+  FL_ONGROUND,
+  type DecodeStats,
+  type PlayerState,
+  type PlayerTrack,
+} from './player-track.js';
+export { MtvReplay, parseReplay } from './replay.js';
