@@ -206,9 +206,13 @@ export function decodePlayerTrack(
   propBits = 5,
 ): PlayerTrack {
   const listThenValues = body.revision === 2;
-  // revision 1 writes a constant block count (4) except on busy ticks, which
-  // is a strong cheap filter against frame-shaped bits inside trailing blocks
-  let learnedA = -1;
+  // The leading 6-bit block count (number of entity blocks in the frame) is a
+  // strong filter against frame-shaped bits inside the trailing non-player
+  // blocks. It is roughly constant per replay but scales with the map's entity
+  // count (4 on a plain bhop run, ~48 on a pinball map), so the accepted band
+  // is derived proportionally from the first frame's value once it is seen.
+  let loA = 1;
+  let hiA = 48;
   const playerClass = body.classes.find((c) => c.name === PLAYER_CLASS);
   if (!playerClass) {
     throw new MtvError('BAD_BODY', `Replay has no ${PLAYER_CLASS} class`);
@@ -225,6 +229,28 @@ export function decodePlayerTrack(
   const anchors = new Map<number, number>();
   for (const kf of body.keyframeIndex) {
     if (kf.frameOffset >= 0 && kf.frameOffset < dataLen) anchors.set(kf.tick + 1, kf.frameOffset);
+  }
+
+  // The accepted block-count band is derived from the anchored frames (their
+  // offsets come from the keyframe index and are certain), plus the first
+  // frame at offset 0. This scales from ~4 on a plain bhop run to ~56 on a
+  // pinball map and rejects the frame-shaped bits inside trailing blocks.
+  {
+    const aValues = [bytes[base]! & 0x3f];
+    for (const off of anchors.values()) {
+      if ((bytes[base + off]! & 0xc0) === 0) aValues.push(bytes[base + off]! & 0x3f);
+    }
+    const positive = aValues.filter((a) => a > 0);
+    const maxA = positive.length > 0 ? Math.max(...positive) : 0;
+    // Only maps with a small, stable entity count (plain bhop/surf runs) get
+    // the tight band: there a bogus high block count is the common resync
+    // trap. Entity-heavy maps (pinball, defrag with many props) have widely
+    // varying counts where the band does more harm than good, so they keep the
+    // permissive default and rely on parse validity plus the successor check.
+    if (maxA > 0 && maxA <= 8) {
+      loA = 1;
+      hiA = maxA + 6;
+    }
   }
 
   const state: MutableState = {
@@ -286,14 +312,7 @@ export function decodePlayerTrack(
     try {
       const r = new BitReader(bytes, base + byteOffset, dataLen - byteOffset);
       const blockCount = r.readBits(6);
-      if (blockCount === 0) return null;
-      if (
-        body.revision === 1 &&
-        learnedA !== -1 &&
-        (blockCount < learnedA || blockCount > learnedA + 4)
-      ) {
-        return null;
-      }
+      if (blockCount < loA || blockCount > hiA) return null;
       if (r.readUBitVar() !== 0) return null;
       if (r.readBits(2) !== 0) return null;
       const propCount = r.readUBitVar();
@@ -320,7 +339,6 @@ export function decodePlayerTrack(
           dec(r, scratch);
         }
       }
-      if (learnedA === -1) learnedA = blockCount;
       return { endBit: r.bitPos, scratch };
     } catch (error) {
       if (error instanceof MtvError) return null;
@@ -336,7 +354,11 @@ export function decodePlayerTrack(
     const limit = Math.min(fromByte + limitBytes, dataLen - 1);
     for (let b = fromByte; b < limit; b++) {
       const b0 = bytes[base + b]!;
-      if (b0 === 0 || (b0 & 0xc0) !== 0) continue;
+      // the first frame byte is {2 zero bits starting the entity UBitVar}{6-bit
+      // block count}; the count must fall in the learned band
+      if ((b0 & 0xc0) !== 0) continue;
+      const a = b0 & 0x3f;
+      if (a < loA || a > hiA) continue;
       const b1 = bytes[base + b + 1]!;
       if ((b1 & 0x3f) !== 0) continue;
       if (parsePlayerFrame(b)) return b;
