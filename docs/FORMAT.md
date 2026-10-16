@@ -253,3 +253,9 @@ What remains before playback can be bit exact: the entity to class mapping (in r
 - The leading 6-bit frame field (4 in normal frames, 1 in empty ones) and the end-of-frame terminator (observed `UBitVar 0` + 2 bits + padding).
 - One isolated misread in the sample (tick 1140: a velocity component decodes as -0.0 while the position clearly keeps moving), pointing at a rare prop this parser does not size correctly yet.
 - Revision 2: the structure of the keyframe payloads (per-entity mini records), the frame data prologue, and deathrun replays decode poorly (moving platforms and doors interact badly with the current frame walker).
+
+## Map assets
+
+A BSP packs some of its materials in the pakfile lump (a zip, compressed with LZMA, method 14). The rest live in the game's VPK archives, which the viewer never bundles: a host application extracts them from a local installation and serves them, and the viewer looks them up under its `assetsBaseUrl`.
+
+VPK directory files (version 1 and 2) are a tree of NUL terminated strings grouped by extension, then directory, then file name, each entry carrying a CRC, a preload size, an archive index, an offset and a length. Entries with archive index 0x7fff keep their data in the directory file itself, after the tree; the rest live in the numbered archives beside it.
