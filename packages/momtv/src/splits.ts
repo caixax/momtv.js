@@ -1,5 +1,5 @@
 import { ByteReader, toBytes } from './byte-reader.js';
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 import { REPLAY_HEADER_SIZE } from './header.js';
 
 /** A 3D vector as serialized in the splits JSON. */
@@ -60,7 +60,7 @@ const MAX_SPLITS_LENGTH = 4 * 1024 * 1024;
  *
  * @returns the parsed splits and the absolute offset where the compressed
  * body starts.
- * @throws {MtvError} `TRUNCATED` or `BAD_SPLITS` on malformed input.
+ * @throws {MomtvError} `TRUNCATED` or `BAD_SPLITS` on malformed input.
  */
 export function readSplits(data: ArrayBuffer | Uint8Array): {
   splits: RunSplits;
@@ -71,24 +71,24 @@ export function readSplits(data: ArrayBuffer | Uint8Array): {
 
   const length = r.i32('splits length');
   if (length <= 0 || length > MAX_SPLITS_LENGTH) {
-    throw new MtvError('BAD_SPLITS', `Splits block has implausible length ${length}`);
+    throw new MomtvError('BAD_SPLITS', `Splits block has implausible length ${length}`);
   }
 
   const raw = r.raw(length, 'splits JSON');
   if (raw[length - 1] !== 0) {
-    throw new MtvError('BAD_SPLITS', 'Splits block is not NUL terminated');
+    throw new MomtvError('BAD_SPLITS', 'Splits block is not NUL terminated');
   }
 
   const text = new TextDecoder('utf-8', { fatal: false }).decode(raw.subarray(0, length - 1));
   if (!text.endsWith('}')) {
-    throw new MtvError('BAD_SPLITS', 'Splits JSON does not end with a closing brace');
+    throw new MomtvError('BAD_SPLITS', 'Splits JSON does not end with a closing brace');
   }
 
   let splits: RunSplits;
   try {
     splits = JSON.parse(text) as RunSplits;
   } catch (error) {
-    throw new MtvError('BAD_SPLITS', `Splits JSON failed to parse: ${(error as Error).message}`);
+    throw new MomtvError('BAD_SPLITS', `Splits JSON failed to parse: ${(error as Error).message}`);
   }
 
   return { splits, bodyOffset: r.pos };

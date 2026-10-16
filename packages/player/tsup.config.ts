@@ -10,10 +10,10 @@ export default defineConfig([
     target: 'es2022',
   },
   {
-    // one file to drop in a page with a script tag, exposing window.MTV
-    entry: { 'mtv-player': 'src/index.ts' },
+    // one file to drop in a page with a script tag, exposing window.MomTV
+    entry: { 'momtv-player': 'src/index.ts' },
     format: ['iife'],
-    globalName: 'MTV',
+    globalName: 'MomTV',
     noExternal: [/@caixax\/.*/],
     minify: true,
     sourcemap: true,

@@ -3,7 +3,7 @@
 //
 // Usage: node tools/re/trace-frame.mjs <replay> [frames]
 import { readFileSync } from 'node:fs';
-import { BitReader, parseReplay } from '../../packages/mtv/dist/index.js';
+import { BitReader, parseReplay } from '../../packages/momtv/dist/index.js';
 
 const path = process.argv[2] ?? 'testbed/public/replays/agtricks.momtv';
 const want = Number(process.argv[3] ?? 3);

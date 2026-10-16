@@ -1,10 +1,10 @@
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 
 /**
  * LSB-first bit reader matching Source engine `bf_read` semantics, as used by
  * the bit-packed sections of the replay body.
  *
- * All reads are bounds checked and throw {@link MtvError} with code
+ * All reads are bounds checked and throw {@link MomtvError} with code
  * `TRUNCATED` instead of reading past the end.
  */
 export class BitReader {
@@ -27,7 +27,7 @@ export class BitReader {
 
   private need(n: number): void {
     if (n < 0 || this.bitPos + n > this.bitLength) {
-      throw new MtvError(
+      throw new MomtvError(
         'TRUNCATED',
         `Bit stream ended while reading ${n} bits at bit ${this.bitPos}`,
       );
@@ -92,7 +92,7 @@ export class BitReader {
       value |= (byte & 0x7f) << shift;
       if ((byte & 0x80) === 0) return value >>> 0;
     }
-    throw new MtvError('BAD_BODY', `Varint longer than five bytes at bit ${this.bitPos}`);
+    throw new MomtvError('BAD_BODY', `Varint longer than five bytes at bit ${this.bitPos}`);
   }
 
   /** Skips `n` bits, with the same bounds checking as a read. */

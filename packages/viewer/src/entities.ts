@@ -1,4 +1,4 @@
-import type { EntityTrack } from '@caixax/mtv';
+import type { EntityTrack } from '@caixax/momtv';
 import type { BspMap } from './bsp/bsp-file.js';
 
 /**

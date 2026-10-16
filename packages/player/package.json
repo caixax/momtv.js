@@ -1,5 +1,5 @@
 {
-  "name": "@caixax/mtv-player",
+  "name": "@caixax/momtv-player",
   "version": "0.1.0",
   "description": "Drop-in player for Momentum Mod replays: the viewer with a loading screen, playback controls and a run HUD",
   "author": "caixax <westlargo@proton.me>",
@@ -15,7 +15,7 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./bundle": "./dist/mtv-player.global.js"
+    "./bundle": "./dist/momtv-player.global.js"
   },
   "files": [
     "dist",
@@ -30,8 +30,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@caixax/mtv": "workspace:*",
-    "@caixax/mtv-viewer": "workspace:*"
+    "@caixax/momtv": "workspace:*",
+    "@caixax/momtv-viewer": "workspace:*"
   },
   "keywords": [
     "momentum-mod",
@@ -42,12 +42,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/caixax/mtv.js.git",
+    "url": "git+https://github.com/caixax/momtv.js.git",
     "directory": "packages/player"
   },
-  "homepage": "https://github.com/caixax/mtv.js/tree/main/packages/player#readme",
+  "homepage": "https://github.com/caixax/momtv.js/tree/main/packages/player#readme",
   "bugs": {
-    "url": "https://github.com/caixax/mtv.js/issues"
+    "url": "https://github.com/caixax/momtv.js/issues"
   },
   "publishConfig": {
     "access": "public"

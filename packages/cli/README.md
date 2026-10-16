@@ -1,16 +1,16 @@
-# @caixax/mtv-cli
+# @caixax/momtv-cli
 
 Command line tools for Momentum Mod replays.
 
-Part of [mtv.js](https://github.com/caixax/mtv.js).
+Part of [momtv.js](https://github.com/caixax/momtv.js).
 
 ## Use it
 
 ```sh
-npx @caixax/mtv-cli run.momtv
+npx @caixax/momtv-cli run.momtv
 ```
 
-`mtv-dump` prints what a replay holds:
+`momtv-dump` prints what a replay holds:
 
 | Flag        | What it prints                                                     |
 | ----------- | ------------------------------------------------------------------ |

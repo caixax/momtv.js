@@ -9,7 +9,7 @@
  *
  * Written from the publicly documented VTF layout.
  */
-import { lzmaDecompress } from '@caixax/mtv';
+import { lzmaDecompress } from '@caixax/momtv';
 import { decodeBc7 } from './bc7.js';
 import { decompressZstd } from './zstd.js';
 

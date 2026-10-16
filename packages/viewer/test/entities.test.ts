@@ -1,4 +1,4 @@
-import type { EntityTrack } from '@caixax/mtv';
+import type { EntityTrack } from '@caixax/momtv';
 import { describe, expect, it } from 'vitest';
 import type { BspMap, BspModel } from '../src/bsp/bsp-file.js';
 import { linkBrushEntities } from '../src/entities.js';

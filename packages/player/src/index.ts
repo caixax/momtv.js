@@ -12,8 +12,8 @@
  * });
  * ```
  */
-import { Button, readHeader, type PlayerState } from '@caixax/mtv';
-import { createViewer, resolveMap, type ViewerOptions, type Viewer } from '@caixax/mtv-viewer';
+import { Button, readHeader, type PlayerState } from '@caixax/momtv';
+import { createViewer, resolveMap, type ViewerOptions, type Viewer } from '@caixax/momtv-viewer';
 import { buildUi, LOADING_STEPS, SPEEDS } from './ui.js';
 
 /** Options for {@link createPlayer}. */
@@ -94,7 +94,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       for (const [name, node] of ui.loading.steps) {
         const here = LOADING_STEPS.indexOf(name as (typeof LOADING_STEPS)[number]);
         const at = LOADING_STEPS.indexOf(step as (typeof LOADING_STEPS)[number]);
-        node.className = `mtvp-load-step${here < at ? ' mtvp-done' : here === at ? ' mtvp-active' : ''}`;
+        node.className = `momtvp-load-step${here < at ? ' momtvp-done' : here === at ? ' momtvp-active' : ''}`;
       }
     }
     let done = 0;
@@ -196,7 +196,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
     const elapsed = Math.max(0, (state.tick - startTick) * tickInterval);
     const finished = endTime > 0 && elapsed >= endTime;
     ui.hud.timer.textContent = formatTime(finished ? endTime : elapsed);
-    ui.hud.timer.classList.toggle('mtvp-finished', finished);
+    ui.hud.timer.classList.toggle('momtvp-finished', finished);
     // Speed reads like the game's: the number alone, blue while it climbs,
     // red while it falls, white when it holds.
     const speed = Math.hypot(state.velocity[0], state.velocity[1]);
@@ -210,8 +210,8 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
         : speed < lastSpeed - SPEED_DEADZONE
           ? 'slower'
           : '';
-    ui.hud.speed.classList.toggle('mtvp-faster', trend === 'faster');
-    ui.hud.speed.classList.toggle('mtvp-slower', trend === 'slower');
+    ui.hud.speed.classList.toggle('momtvp-faster', trend === 'faster');
+    ui.hud.speed.classList.toggle('momtvp-slower', trend === 'slower');
     ui.hud.detail.textContent =
       `tick ${state.tick}  ${state.onGround ? 'ground' : 'air'}\n` +
       `pos ${state.origin.map((v) => Math.round(v)).join(' ')}`;
@@ -223,7 +223,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
     }
     ui.hud.split.textContent = passed;
     for (const [name, bit] of KEYS) {
-      ui.hud.keys.get(name)?.classList.toggle('mtvp-on', (state.buttons & bit) !== 0);
+      ui.hud.keys.get(name)?.classList.toggle('momtvp-on', (state.buttons & bit) !== 0);
     }
     if (!dragging) {
       const fraction = duration > 0 ? clock.time / duration : 0;
@@ -258,7 +258,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   };
   ui.seek.addEventListener('pointerdown', (event) => {
     dragging = true;
-    ui.seek.classList.add('mtvp-dragging');
+    ui.seek.classList.add('momtvp-dragging');
     ui.seek.setPointerCapture(event.pointerId);
     seekFromPointer(event);
   });
@@ -268,7 +268,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   const endDrag = (event: PointerEvent): void => {
     if (!dragging) return;
     dragging = false;
-    ui.seek.classList.remove('mtvp-dragging');
+    ui.seek.classList.remove('momtvp-dragging');
     if (ui.seek.hasPointerCapture(event.pointerId)) ui.seek.releasePointerCapture(event.pointerId);
   };
   ui.seek.addEventListener('pointerup', endDrag);
@@ -296,14 +296,14 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
     ui.hud.crosshair.style.display = mode === 'firstperson' ? '' : 'none';
   };
   ui.cameraSelect.addEventListener('change', () => applyCamera(ui.cameraSelect.value));
-  ui.settingsButton.addEventListener('click', () => ui.menu.classList.toggle('mtvp-open'));
+  ui.settingsButton.addEventListener('click', () => ui.menu.classList.toggle('momtvp-open'));
   ui.fullscreenButton.addEventListener('click', () => {
     if (document.fullscreenElement === ui.root) void document.exitFullscreen();
     else void ui.root.requestFullscreen?.();
   });
   ui.settings.fov.addEventListener('input', () => viewer.setFov(Number(ui.settings.fov.value)));
   ui.settings.hud.addEventListener('change', () => {
-    ui.hud.panel.classList.toggle('mtvp-hidden', !ui.settings.hud.checked);
+    ui.hud.panel.classList.toggle('momtvp-hidden', !ui.settings.hud.checked);
   });
   ui.settings.props.addEventListener('change', () =>
     viewer.setLayer('props', ui.settings.props.checked),
@@ -315,17 +315,17 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
 
   // the bar steps aside when the pointer is still
   const wake = (): void => {
-    ui.root.classList.remove('mtvp-idle');
+    ui.root.classList.remove('momtvp-idle');
     window.clearTimeout(idleTimer);
     idleTimer = window.setTimeout(() => {
-      if (viewer.clock?.playing && !ui.menu.classList.contains('mtvp-open')) {
-        ui.root.classList.add('mtvp-idle');
+      if (viewer.clock?.playing && !ui.menu.classList.contains('momtvp-open')) {
+        ui.root.classList.add('momtvp-idle');
       }
     }, IDLE_DELAY);
   };
   ui.root.addEventListener('pointermove', wake);
   ui.root.addEventListener('pointerleave', () => {
-    if (viewer.clock?.playing) ui.root.classList.add('mtvp-idle');
+    if (viewer.clock?.playing) ui.root.classList.add('momtvp-idle');
   });
 
   const onKey = (event: KeyboardEvent): void => {
@@ -377,18 +377,18 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       const at = (event.tick * tickInterval) / Math.max(0.001, duration);
       if (at <= 0 || at >= 1) continue;
       const mark = document.createElement('div');
-      mark.className = 'mtvp-seek-zone';
+      mark.className = 'momtvp-seek-zone';
       mark.style.left = `${at * 100}%`;
       ui.seekZones.append(mark);
     }
   };
 
   const fail = (error: Error): void => {
-    ui.loading.panel.classList.remove('mtvp-gone');
+    ui.loading.panel.classList.remove('momtvp-gone');
     ui.loading.title.textContent = 'Could not load the replay';
     ui.loading.detail.textContent = '';
     const message = document.createElement('div');
-    message.className = 'mtvp-error';
+    message.className = 'momtvp-error';
     message.textContent = error.message;
     ui.loading.panel.append(message);
     options.onError?.(error);
@@ -398,9 +398,9 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
     replay: string | ArrayBuffer | Uint8Array,
     map?: string | ArrayBuffer | Uint8Array,
   ): Promise<void> {
-    ui.loading.panel.classList.remove('mtvp-gone');
+    ui.loading.panel.classList.remove('momtvp-gone');
     ui.loading.title.textContent = 'Loading replay';
-    ui.loading.panel.querySelectorAll('.mtvp-error').forEach((node) => node.remove());
+    ui.loading.panel.querySelectorAll('.momtvp-error').forEach((node) => node.remove());
     progress.clear();
     setStep('replay', 0, '');
     try {
@@ -469,7 +469,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       drawZones();
       applySpeed(SPEEDS[Number(ui.speedRange.value)] ?? 1);
       applyCamera(ui.cameraSelect.value);
-      ui.loading.panel.classList.add('mtvp-gone');
+      ui.loading.panel.classList.add('momtvp-gone');
       wake();
       if (options.autoplay ?? true) viewer.play();
     } catch (error) {
@@ -481,7 +481,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   if (options.camera) ui.cameraSelect.value = options.camera;
   if (options.hud === false) {
     ui.settings.hud.checked = false;
-    ui.hud.panel.classList.add('mtvp-hidden');
+    ui.hud.panel.classList.add('momtvp-hidden');
   }
   if (options.loop) ui.settings.loop.checked = true;
   if (options.fov) ui.settings.fov.value = String(options.fov);

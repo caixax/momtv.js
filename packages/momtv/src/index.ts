@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-export { MtvError, type MtvErrorCode } from './error.js';
+export { MomtvError, type MomtvErrorCode } from './error.js';
 export {
   Button,
   Gamemode,
@@ -76,4 +76,4 @@ export {
   type PropEncoding,
   type PropValue,
 } from './prop-encoding.js';
-export { MtvReplay, parseReplay } from './replay.js';
+export { MomtvReplay, parseReplay } from './replay.js';

@@ -5,7 +5,7 @@
  * (method 14), which is what Momentum maps use; deflate uses the platform
  * DecompressionStream, so no inflate implementation is bundled.
  */
-import { lzmaDecompress } from '@caixax/mtv';
+import { lzmaDecompress } from '@caixax/momtv';
 
 /** One entry of the embedded archive. */
 export interface PakEntry {

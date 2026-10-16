@@ -1,13 +1,13 @@
-# @caixax/mtv
+# @caixax/momtv
 
 Reader for Momentum Mod replays (`.momtv`, MomentumTV). Zero dependencies, `DataView` and `Uint8Array` only, so it runs the same in a browser, a worker and Node.
 
-Part of [mtv.js](https://github.com/caixax/mtv.js).
+Part of [momtv.js](https://github.com/caixax/momtv.js).
 
 ## Use it
 
 ```ts
-import { parseReplay, readHeader } from '@caixax/mtv';
+import { parseReplay, readHeader } from '@caixax/momtv';
 
 const data = new Uint8Array(await file.arrayBuffer());
 
@@ -33,11 +33,11 @@ for (const entity of replay.toEntityTracks()) {
 - Every delta frame, walked exactly: the player's position, angles, velocity, buttons and flags on every tick, and the same for the entities the map moves.
 - Valve's LZMA framing, which the body is compressed with.
 
-The format was reverse engineered from the files themselves; what is known and how sure it is lives in [docs/FORMAT.md](https://github.com/caixax/mtv.js/blob/main/docs/FORMAT.md).
+The format was reverse engineered from the files themselves; what is known and how sure it is lives in [docs/FORMAT.md](https://github.com/caixax/momtv.js/blob/main/docs/FORMAT.md).
 
 ## Errors
 
-Anything the parser cannot make sense of throws an `MtvError` carrying a stable `code`, never a silent wrong answer. Truncated files, bad magic numbers and flipped bytes all throw rather than hang.
+Anything the parser cannot make sense of throws an `MomtvError` carrying a stable `code`, never a silent wrong answer. Truncated files, bad magic numbers and flipped bytes all throw rather than hang.
 
 ## Licence
 

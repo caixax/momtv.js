@@ -17,7 +17,7 @@ import { decodeEntityTracks, type EntityTrack } from './entity-track.js';
  * Header, splits and the body section tables are parsed eagerly; the per-tick
  * player track is decoded lazily on first access and cached.
  */
-export class MtvReplay {
+export class MomtvReplay {
   /** The fixed file header. */
   readonly header: ReplayHeader;
   /** The run splits block. */
@@ -149,16 +149,16 @@ export class MtvReplay {
 /**
  * Parses a complete .momtv replay: header, splits, LZMA body and all body
  * sections. The per-tick player track is decoded lazily (see
- * {@link MtvReplay.toTrack}).
+ * {@link MomtvReplay.toTrack}).
  *
  * @param data the raw file contents.
- * @throws {MtvError} on any malformed input, with a stable `code`.
+ * @throws {MomtvError} on any malformed input, with a stable `code`.
  */
-export function parseReplay(data: ArrayBuffer | Uint8Array): MtvReplay {
+export function parseReplay(data: ArrayBuffer | Uint8Array): MomtvReplay {
   const bytes = toBytes(data);
   const header = readHeader(bytes);
   const { splits, bodyOffset } = readSplits(bytes);
   const bodyBytes = decompressBody(bytes, header, bodyOffset);
   const body = parseBody(bodyBytes, header);
-  return new MtvReplay(header, splits, body);
+  return new MomtvReplay(header, splits, body);
 }

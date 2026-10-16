@@ -7,7 +7,7 @@
  * cannot change anything around it.
  */
 export const CSS = `
-.mtvp {
+.momtvp {
   position: relative;
   display: block;
   width: 100%;
@@ -18,17 +18,17 @@ export const CSS = `
   color: #e8eef5;
   font: 13px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   user-select: none;
-  --mtvp-accent: #f0a93b;
+  --momtvp-accent: #f0a93b;
 }
-.mtvp * { box-sizing: border-box; }
-.mtvp canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.momtvp * { box-sizing: border-box; }
+.momtvp canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 /* the run readout, laid out the way the game lays it out */
-.mtvp-hud { position: absolute; inset: 0; pointer-events: none; }
-.mtvp-hud.mtvp-hidden { display: none; }
+.momtvp-hud { position: absolute; inset: 0; pointer-events: none; }
+.momtvp-hud.momtvp-hidden { display: none; }
 
 /* timer and stage, across the top */
-.mtvp-hud-top {
+.momtvp-hud-top {
   position: absolute;
   top: 14px;
   left: 50%;
@@ -36,15 +36,15 @@ export const CSS = `
   text-align: center;
   text-shadow: 0 2px 4px rgba(0, 0, 0, .85);
 }
-.mtvp-timer {
+.momtvp-timer {
   font-size: 38px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: .5px;
   line-height: 1;
 }
-.mtvp-timer.mtvp-finished { color: var(--mtvp-accent); }
-.mtvp-split {
+.momtvp-timer.momtvp-finished { color: var(--momtvp-accent); }
+.momtvp-split {
   margin-top: 4px;
   font-size: 14px;
   opacity: .8;
@@ -54,7 +54,7 @@ export const CSS = `
 }
 
 /* the crosshair, and the speed just under it */
-.mtvp-hud-middle {
+.momtvp-hud-middle {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -63,16 +63,16 @@ export const CSS = `
   flex-direction: column;
   align-items: center;
 }
-.mtvp-cross { position: relative; width: 11px; height: 11px; opacity: .8; }
-.mtvp-cross::before, .mtvp-cross::after {
+.momtvp-cross { position: relative; width: 11px; height: 11px; opacity: .8; }
+.momtvp-cross::before, .momtvp-cross::after {
   content: '';
   position: absolute;
   background: #fff;
   box-shadow: 0 0 2px rgba(0, 0, 0, .9);
 }
-.mtvp-cross::before { left: 50%; top: 0; width: 1px; height: 100%; margin-left: -.5px; }
-.mtvp-cross::after { top: 50%; left: 0; height: 1px; width: 100%; margin-top: -.5px; }
-.mtvp-speed {
+.momtvp-cross::before { left: 50%; top: 0; width: 1px; height: 100%; margin-left: -.5px; }
+.momtvp-cross::after { top: 50%; left: 0; height: 1px; width: 100%; margin-top: -.5px; }
+.momtvp-speed {
   margin-top: 26px;
   font-size: 40px;
   font-weight: 700;
@@ -82,18 +82,18 @@ export const CSS = `
   text-shadow: 0 2px 5px rgba(0, 0, 0, .85);
   transition: color .09s linear;
 }
-.mtvp-speed.mtvp-faster { color: #5fa8ff; }
-.mtvp-speed.mtvp-slower { color: #ff5a52; }
+.momtvp-speed.momtvp-faster { color: #5fa8ff; }
+.momtvp-speed.momtvp-slower { color: #ff5a52; }
 
 /* the keys the runner pressed, along the bottom */
-.mtvp-hud-bottom {
+.momtvp-hud-bottom {
   position: absolute;
   bottom: 96px;
   left: 50%;
   transform: translateX(-50%);
 }
-.mtvp-keys { display: grid; grid-template-columns: repeat(3, 34px); gap: 4px; justify-content: center; }
-.mtvp-key {
+.momtvp-keys { display: grid; grid-template-columns: repeat(3, 34px); gap: 4px; justify-content: center; }
+.momtvp-key {
   height: 28px;
   border: 1px solid rgba(255, 255, 255, .3);
   border-radius: 4px;
@@ -105,11 +105,11 @@ export const CSS = `
   background: rgba(0, 0, 0, .4);
   opacity: .5;
 }
-.mtvp-key.mtvp-on { background: var(--mtvp-accent); border-color: var(--mtvp-accent); color: #10151b; opacity: 1; }
-.mtvp-key.mtvp-wide { grid-column: span 3; }
+.momtvp-key.momtvp-on { background: var(--momtvp-accent); border-color: var(--momtvp-accent); color: #10151b; opacity: 1; }
+.momtvp-key.momtvp-wide { grid-column: span 3; }
 
 /* the small print, out of the way in a corner */
-.mtvp-detail {
+.momtvp-detail {
   position: absolute;
   left: 14px;
   top: 14px;
@@ -121,7 +121,7 @@ export const CSS = `
 }
 
 /* the bar along the bottom */
-.mtvp-bar {
+.momtvp-bar {
   position: absolute;
   left: 0;
   right: 0;
@@ -133,15 +133,15 @@ export const CSS = `
   gap: 8px;
   transition: opacity .25s ease;
 }
-.mtvp.mtvp-idle .mtvp-bar { opacity: 0; pointer-events: none; }
-.mtvp-seek {
+.momtvp.momtvp-idle .momtvp-bar { opacity: 0; pointer-events: none; }
+.momtvp-seek {
   position: relative;
   height: 16px;
   display: flex;
   align-items: center;
   cursor: pointer;
 }
-.mtvp-seek-track {
+.momtvp-seek-track {
   position: relative;
   height: 4px;
   width: 100%;
@@ -149,22 +149,22 @@ export const CSS = `
   background: rgba(255, 255, 255, .22);
   overflow: hidden;
 }
-.mtvp-seek-fill { position: absolute; inset: 0 auto 0 0; background: var(--mtvp-accent); width: 0%; }
-.mtvp-seek-zone { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 255, 255, .55); }
-.mtvp-seek-head {
+.momtvp-seek-fill { position: absolute; inset: 0 auto 0 0; background: var(--momtvp-accent); width: 0%; }
+.momtvp-seek-zone { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255, 255, 255, .55); }
+.momtvp-seek-head {
   position: absolute;
   top: 50%;
   width: 12px;
   height: 12px;
   margin: -6px 0 0 -6px;
   border-radius: 50%;
-  background: var(--mtvp-accent);
+  background: var(--momtvp-accent);
   transform: scale(0);
   transition: transform .12s ease;
 }
-.mtvp-seek:hover .mtvp-seek-head, .mtvp-seek.mtvp-dragging .mtvp-seek-head { transform: scale(1); }
-.mtvp-row { display: flex; align-items: center; gap: 8px; }
-.mtvp-btn {
+.momtvp-seek:hover .momtvp-seek-head, .momtvp-seek.momtvp-dragging .momtvp-seek-head { transform: scale(1); }
+.momtvp-row { display: flex; align-items: center; gap: 8px; }
+.momtvp-btn {
   appearance: none;
   border: 0;
   background: transparent;
@@ -175,11 +175,11 @@ export const CSS = `
   cursor: pointer;
   line-height: 1;
 }
-.mtvp-btn:hover { background: rgba(255, 255, 255, .12); }
-.mtvp-btn.mtvp-icon { width: 32px; height: 30px; display: grid; place-items: center; font-size: 15px; }
-.mtvp-time { font-variant-numeric: tabular-nums; opacity: .8; min-width: 104px; }
-.mtvp-grow { flex: 1; }
-.mtvp-select {
+.momtvp-btn:hover { background: rgba(255, 255, 255, .12); }
+.momtvp-btn.momtvp-icon { width: 32px; height: 30px; display: grid; place-items: center; font-size: 15px; }
+.momtvp-time { font-variant-numeric: tabular-nums; opacity: .8; min-width: 104px; }
+.momtvp-grow { flex: 1; }
+.momtvp-select {
   appearance: none;
   background: rgba(255, 255, 255, .1);
   border: 1px solid rgba(255, 255, 255, .16);
@@ -189,14 +189,14 @@ export const CSS = `
   border-radius: 4px;
   cursor: pointer;
 }
-.mtvp-select:hover { background: rgba(255, 255, 255, .18); }
-.mtvp-speedbox { display: flex; align-items: center; gap: 7px; }
-.mtvp-speedbox input[type=range] {
+.momtvp-select:hover { background: rgba(255, 255, 255, .18); }
+.momtvp-speedbox { display: flex; align-items: center; gap: 7px; }
+.momtvp-speedbox input[type=range] {
   width: 104px;
-  accent-color: var(--mtvp-accent);
+  accent-color: var(--momtvp-accent);
   cursor: pointer;
 }
-.mtvp-speedvalue {
+.momtvp-speedvalue {
   font-variant-numeric: tabular-nums;
   min-width: 44px;
   text-align: right;
@@ -205,7 +205,7 @@ export const CSS = `
 }
 
 /* the settings flyout */
-.mtvp-menu {
+.momtvp-menu {
   position: absolute;
   right: 12px;
   bottom: 56px;
@@ -218,15 +218,15 @@ export const CSS = `
   flex-direction: column;
   gap: 8px;
 }
-.mtvp-menu.mtvp-open { display: flex; }
-.mtvp-menu h4 { margin: 0 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .55; font-weight: 600; }
-.mtvp-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mtvp-field label { opacity: .85; }
-.mtvp-field input[type=range] { width: 108px; accent-color: var(--mtvp-accent); }
-.mtvp-field input[type=checkbox] { accent-color: var(--mtvp-accent); }
+.momtvp-menu.momtvp-open { display: flex; }
+.momtvp-menu h4 { margin: 0 0 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .55; font-weight: 600; }
+.momtvp-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.momtvp-field label { opacity: .85; }
+.momtvp-field input[type=range] { width: 108px; accent-color: var(--momtvp-accent); }
+.momtvp-field input[type=checkbox] { accent-color: var(--momtvp-accent); }
 
 /* the loading screen */
-.mtvp-load {
+.momtvp-load {
   position: absolute;
   inset: 0;
   display: flex;
@@ -239,24 +239,24 @@ export const CSS = `
   text-align: center;
   transition: opacity .35s ease;
 }
-.mtvp-load.mtvp-gone { opacity: 0; pointer-events: none; }
-.mtvp-load-title { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
-.mtvp-load-sub { font-size: 12px; opacity: .6; min-height: 16px; font-variant-numeric: tabular-nums; }
-.mtvp-load-track {
+.momtvp-load.momtvp-gone { opacity: 0; pointer-events: none; }
+.momtvp-load-title { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
+.momtvp-load-sub { font-size: 12px; opacity: .6; min-height: 16px; font-variant-numeric: tabular-nums; }
+.momtvp-load-track {
   width: min(380px, 70%);
   height: 4px;
   border-radius: 2px;
   background: rgba(255, 255, 255, .14);
   overflow: hidden;
 }
-.mtvp-load-fill {
+.momtvp-load-fill {
   height: 100%;
   width: 0%;
-  background: var(--mtvp-accent);
+  background: var(--momtvp-accent);
   transition: width .2s ease;
 }
-.mtvp-load-steps { display: flex; gap: 14px; font-size: 11px; opacity: .55; flex-wrap: wrap; justify-content: center; }
-.mtvp-load-step.mtvp-done { opacity: 1; color: var(--mtvp-accent); }
-.mtvp-load-step.mtvp-active { opacity: 1; }
-.mtvp-error { color: #ff8a7a; font-size: 13px; max-width: 420px; }
+.momtvp-load-steps { display: flex; gap: 14px; font-size: 11px; opacity: .55; flex-wrap: wrap; justify-content: center; }
+.momtvp-load-step.momtvp-done { opacity: 1; color: var(--momtvp-accent); }
+.momtvp-load-step.momtvp-active { opacity: 1; }
+.momtvp-error { color: #ff8a7a; font-size: 13px; max-width: 420px; }
 `;

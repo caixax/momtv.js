@@ -1,5 +1,5 @@
 import type { BitReader } from './bit-reader.js';
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 import { CLASS_PROPS, FALLBACK_PROPS, SHARED_PROPS, UNNAMED_ARRAYS } from './prop-table.js';
 
 /**
@@ -95,7 +95,7 @@ export type PropValue = number | number[] | string;
 /**
  * Reads one property value, advancing the reader by exactly its width.
  *
- * @throws MtvError when the encoding describes something this parser cannot
+ * @throws MomtvError when the encoding describes something this parser cannot
  * size, so a frame is never silently misread.
  */
 export function readPropValue(r: BitReader, encoding: PropEncoding): PropValue {
@@ -138,14 +138,14 @@ function readValue(r: BitReader, encoding: PropEncoding): PropValue {
     }
     case 'array': {
       if (!encoding.e || encoding.c === undefined) {
-        throw new MtvError('BAD_BODY', 'array property with no element encoding');
+        throw new MomtvError('BAD_BODY', 'array property with no element encoding');
       }
       if (encoding.s !== undefined && encoding.s > 1) {
-        throw new MtvError('BAD_BODY', 'array of structures is not supported yet');
+        throw new MomtvError('BAD_BODY', 'array of structures is not supported yet');
       }
       const count = r.readBits(encoding.c);
       if (encoding.m !== undefined && count > encoding.m) {
-        throw new MtvError('BAD_BODY', `array holds ${count} elements, more than ${encoding.m}`);
+        throw new MomtvError('BAD_BODY', `array holds ${count} elements, more than ${encoding.m}`);
       }
       const values: number[] = [];
       for (let i = 0; i < count; i++) {
@@ -166,7 +166,7 @@ function readValue(r: BitReader, encoding: PropEncoding): PropValue {
  * their names along the way, so any name left unresolved is matched against
  * that class's arrays in order, which is how they line up.
  *
- * @throws MtvError when a property cannot be resolved, rather than guessing a
+ * @throws MomtvError when a property cannot be resolved, rather than guessing a
  * width and corrupting everything that follows.
  */
 export function resolveClassProps(className: string, props: readonly string[]): PropEncoding[] {
@@ -192,6 +192,6 @@ export function resolveClassProps(className: string, props: readonly string[]): 
     }
     const array = arrays[nextArray++];
     if (array) return array;
-    throw new MtvError('BAD_BODY', `no known encoding for ${className}::${name}`);
+    throw new MomtvError('BAD_BODY', `no known encoding for ${className}::${name}`);
   });
 }

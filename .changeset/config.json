@@ -3,7 +3,9 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
-  "linked": [["@caixax/mtv", "@caixax/mtv-viewer", "@caixax/mtv-player", "@caixax/mtv-cli"]],
+  "linked": [
+    ["@caixax/momtv", "@caixax/momtv-viewer", "@caixax/momtv-player", "@caixax/momtv-cli"]
+  ],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",

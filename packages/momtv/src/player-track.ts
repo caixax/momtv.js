@@ -1,6 +1,6 @@
 import { BitReader } from './bit-reader.js';
 import type { ReplayBody } from './body-sections.js';
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 import { decodeTrackExact } from './track-exact.js';
 
 /**
@@ -78,7 +78,7 @@ const plausibleCoord = (v: number): boolean => Number.isFinite(v) && Math.abs(v)
 const plausibleVel = (v: number): boolean => Number.isFinite(v) && Math.abs(v) <= 20000;
 
 function bad(message: string): never {
-  throw new MtvError('BAD_BODY', message);
+  throw new MomtvError('BAD_BODY', message);
 }
 
 /**
@@ -232,7 +232,7 @@ export function decodePlayerTrack(
   let hiA = 48;
   const playerClass = body.classes.find((c) => c.name === PLAYER_CLASS);
   if (!playerClass) {
-    throw new MtvError('BAD_BODY', `Replay has no ${PLAYER_CLASS} class`);
+    throw new MomtvError('BAD_BODY', `Replay has no ${PLAYER_CLASS} class`);
   }
   const decoders: (PropDecoder | undefined)[] = playerClass.props.map(
     (name) => PLAYER_PROP_DECODERS[name],
@@ -315,7 +315,7 @@ export function decodePlayerTrack(
         dec(r, state);
       }
     } catch (error) {
-      if (!(error instanceof MtvError)) throw error;
+      if (!(error instanceof MomtvError)) throw error;
       // a partial seed is fine; the frames fill in the rest
     }
   }
@@ -378,7 +378,7 @@ export function decodePlayerTrack(
       if (!hasCore) return null;
       return { endBit: r.bitPos, scratch };
     } catch (error) {
-      if (error instanceof MtvError) return null;
+      if (error instanceof MomtvError) return null;
       throw error;
     }
   };

@@ -1,6 +1,6 @@
 import { ByteReader, toBytes } from './byte-reader.js';
 import { ReplayCompression } from './enums.js';
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 import type { ReplayHeader } from './header.js';
 import { lzmaDecompress } from './lzma.js';
 
@@ -21,7 +21,7 @@ const MAX_BODY_SIZE = 256 * 1024 * 1024;
  * @param header the parsed replay header (for the compression field).
  * @param bodyOffset absolute offset where the body starts (from `readSplits`).
  * @returns the decompressed body bytes.
- * @throws {MtvError} on truncated or malformed input.
+ * @throws {MomtvError} on truncated or malformed input.
  */
 export function decompressBody(
   data: ArrayBuffer | Uint8Array,
@@ -35,7 +35,7 @@ export function decompressBody(
     return r.raw(r.remaining, 'uncompressed body');
   }
   if (header.compression !== ReplayCompression.Lzma) {
-    throw new MtvError(
+    throw new MomtvError(
       'UNSUPPORTED_COMPRESSION',
       `Unsupported compression type ${header.compression}`,
     );
@@ -43,7 +43,7 @@ export function decompressBody(
 
   const id = r.u32('LZMA id');
   if (id !== VALVE_LZMA_ID) {
-    throw new MtvError(
+    throw new MomtvError(
       'BAD_LZMA',
       `Body does not start with the Valve LZMA id (got 0x${id.toString(16)})`,
     );
@@ -52,7 +52,7 @@ export function decompressBody(
   const actualSize = r.u32('actualSize');
   const lzmaSize = r.u32('lzmaSize');
   if (actualSize > MAX_BODY_SIZE) {
-    throw new MtvError(
+    throw new MomtvError(
       'LIMIT_EXCEEDED',
       `Declared body size ${actualSize} exceeds the ${MAX_BODY_SIZE} byte cap`,
     );
@@ -63,7 +63,7 @@ export function decompressBody(
 
   const out = lzmaDecompress(props, compressed, actualSize);
   if (out.length !== actualSize) {
-    throw new MtvError(
+    throw new MomtvError(
       'BAD_LZMA',
       `Body decompressed to ${out.length} bytes, header declared ${actualSize}`,
     );

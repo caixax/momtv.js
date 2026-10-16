@@ -8,7 +8,7 @@
 //
 // Usage: node tools/re/fit-widths.mjs [replay...]
 import { readFileSync } from 'node:fs';
-import { BitReader, parseReplay, resolveClassProps } from '../../packages/mtv/dist/index.js';
+import { BitReader, parseReplay, resolveClassProps } from '../../packages/momtv/dist/index.js';
 
 const COORD_FRACTIONAL_BITS = 5;
 const COORD_INTEGER_BITS = 14;

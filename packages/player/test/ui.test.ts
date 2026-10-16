@@ -30,7 +30,7 @@ describe('buildUi', () => {
 
   it('puts everything the player drives inside the container', () => {
     const ui = buildUi(container);
-    expect(container.querySelector('.mtvp')).toBe(ui.root);
+    expect(container.querySelector('.momtvp')).toBe(ui.root);
     expect(ui.canvas.tagName).toBe('CANVAS');
     expect(ui.root.contains(ui.canvas)).toBe(true);
     expect(ui.root.contains(ui.bar)).toBe(true);
@@ -45,14 +45,14 @@ describe('buildUi', () => {
 
   it('puts the timer on top, the speed in the middle and the keys below', () => {
     const ui = buildUi(container);
-    expect(ui.hud.timer.parentElement?.className).toBe('mtvp-hud-top');
-    expect(ui.hud.split.parentElement?.className).toBe('mtvp-hud-top');
-    expect(ui.hud.speed.parentElement?.className).toBe('mtvp-hud-middle');
-    expect(ui.hud.crosshair.parentElement?.className).toBe('mtvp-hud-middle');
+    expect(ui.hud.timer.parentElement?.className).toBe('momtvp-hud-top');
+    expect(ui.hud.split.parentElement?.className).toBe('momtvp-hud-top');
+    expect(ui.hud.speed.parentElement?.className).toBe('momtvp-hud-middle');
+    expect(ui.hud.crosshair.parentElement?.className).toBe('momtvp-hud-middle');
     // the crosshair comes first, so the speed reads under it
     expect(ui.hud.crosshair.nextElementSibling).toBe(ui.hud.speed);
     expect(ui.hud.keys.get('jump')?.parentElement?.parentElement?.className).toBe(
-      'mtvp-hud-bottom',
+      'momtvp-hud-bottom',
     );
   });
 
@@ -96,12 +96,12 @@ describe('buildUi', () => {
     document.body.append(second);
     buildUi(second);
     expect(document.querySelectorAll('#mtv-player-styles')).toHaveLength(1);
-    expect(document.querySelectorAll('.mtvp')).toHaveLength(2);
+    expect(document.querySelectorAll('.momtvp')).toHaveLength(2);
   });
 
   it('starts with the settings closed and the loading screen up', () => {
     const ui = buildUi(container);
-    expect(ui.menu.classList.contains('mtvp-open')).toBe(false);
-    expect(ui.loading.panel.classList.contains('mtvp-gone')).toBe(false);
+    expect(ui.menu.classList.contains('momtvp-open')).toBe(false);
+    expect(ui.loading.panel.classList.contains('momtvp-gone')).toBe(false);
   });
 });

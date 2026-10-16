@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Decompresses the fixture replay body into tools/out/body.bin using the
-// built @caixax/mtv package (run `pnpm build` first).
+// built @caixax/momtv package (run `pnpm build` first).
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { decompressBody, readHeader, readSplits } from '../packages/mtv/dist/index.js';
+import { decompressBody, readHeader, readSplits } from '../packages/momtv/dist/index.js';
 
 const file = process.argv[2] ?? new URL('../fixtures/bhop_eazy.mtv', import.meta.url);
 const data = new Uint8Array(readFileSync(file));

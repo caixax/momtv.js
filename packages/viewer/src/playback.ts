@@ -1,4 +1,4 @@
-import { trackStateAt, type MtvReplay, type PlayerState } from '@caixax/mtv';
+import { trackStateAt, type MomtvReplay, type PlayerState } from '@caixax/momtv';
 
 /** Camera modes supported by the playback engine. */
 export type CameraMode = 'firstperson' | 'thirdperson' | 'free';
@@ -21,7 +21,7 @@ export interface PlaybackEvents {
  * its own and is fully testable.
  */
 export class PlaybackClock {
-  private readonly replay: MtvReplay;
+  private readonly replay: MomtvReplay;
   private time_ = 0;
   private speed_ = 1;
   private playing_ = false;
@@ -33,7 +33,7 @@ export class PlaybackClock {
     end: [],
   };
 
-  constructor(replay: MtvReplay) {
+  constructor(replay: MomtvReplay) {
     this.replay = replay;
   }
 

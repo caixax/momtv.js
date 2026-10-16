@@ -84,28 +84,28 @@ export function buildUi(container: HTMLElement): PlayerUi {
     return node;
   };
 
-  const root = el('div', 'mtvp');
+  const root = el('div', 'momtvp');
   const canvas = el('canvas');
   root.append(canvas);
 
   // --- the run readout, in three places like the game's own ---
-  const hudPanel = el('div', 'mtvp-hud');
+  const hudPanel = el('div', 'momtvp-hud');
 
-  const top = el('div', 'mtvp-hud-top');
-  const timer = el('div', 'mtvp-timer', '0:00.000');
-  const split = el('div', 'mtvp-split', '');
+  const top = el('div', 'momtvp-hud-top');
+  const timer = el('div', 'momtvp-timer', '0:00.000');
+  const split = el('div', 'momtvp-split', '');
   top.append(timer, split);
 
-  const middle = el('div', 'mtvp-hud-middle');
-  const crosshair = el('div', 'mtvp-cross');
-  const speed = el('div', 'mtvp-speed', '0');
+  const middle = el('div', 'momtvp-hud-middle');
+  const crosshair = el('div', 'momtvp-cross');
+  const speed = el('div', 'momtvp-speed', '0');
   middle.append(crosshair, speed);
 
-  const bottom = el('div', 'mtvp-hud-bottom');
-  const keysBox = el('div', 'mtvp-keys');
+  const bottom = el('div', 'momtvp-hud-bottom');
+  const keysBox = el('div', 'momtvp-keys');
   const keys = new Map<string, HTMLElement>();
   const addKey = (name: string, label: string, wide = false): void => {
-    const node = el('div', `mtvp-key${wide ? ' mtvp-wide' : ''}`, label);
+    const node = el('div', `momtvp-key${wide ? ' momtvp-wide' : ''}`, label);
     keys.set(name, node);
     keysBox.append(node);
   };
@@ -122,28 +122,28 @@ export function buildUi(container: HTMLElement): PlayerUi {
   keys.get('spacer2')!.style.visibility = 'hidden';
   bottom.append(keysBox);
 
-  const detail = el('div', 'mtvp-detail', '');
+  const detail = el('div', 'momtvp-detail', '');
   hudPanel.append(top, middle, bottom, detail);
   root.append(hudPanel);
 
   // --- the bar ---
-  const bar = el('div', 'mtvp-bar');
-  const seek = el('div', 'mtvp-seek');
-  const seekTrack = el('div', 'mtvp-seek-track');
-  const seekFill = el('div', 'mtvp-seek-fill');
+  const bar = el('div', 'momtvp-bar');
+  const seek = el('div', 'momtvp-seek');
+  const seekTrack = el('div', 'momtvp-seek-track');
+  const seekFill = el('div', 'momtvp-seek-fill');
   const seekZones = el('div');
-  const seekHead = el('div', 'mtvp-seek-head');
+  const seekHead = el('div', 'momtvp-seek-head');
   seekTrack.append(seekFill, seekZones);
   seek.append(seekTrack, seekHead);
 
-  const row = el('div', 'mtvp-row');
-  const playButton = el('button', 'mtvp-btn mtvp-icon', '▶');
+  const row = el('div', 'momtvp-row');
+  const playButton = el('button', 'momtvp-btn momtvp-icon', '▶');
   playButton.title = 'Play or pause (space)';
-  const time = el('div', 'mtvp-time', '0:00.000 / 0:00.000');
-  const grow = el('div', 'mtvp-grow');
+  const time = el('div', 'momtvp-time', '0:00.000 / 0:00.000');
+  const grow = el('div', 'momtvp-grow');
   // Playback speed: a slider over the steps below, so the slow end has as
   // much room as the fast one.
-  const speedBox = el('div', 'mtvp-speedbox');
+  const speedBox = el('div', 'momtvp-speedbox');
   const speedRange = el('input');
   speedRange.type = 'range';
   speedRange.min = '0';
@@ -151,10 +151,10 @@ export function buildUi(container: HTMLElement): PlayerUi {
   speedRange.step = '1';
   speedRange.value = String(SPEEDS.indexOf(1));
   speedRange.title = 'Playback speed';
-  const speedValue = el('div', 'mtvp-speedvalue', '1x');
+  const speedValue = el('div', 'momtvp-speedvalue', '1x');
   speedValue.title = 'Back to normal speed';
   speedBox.append(speedRange, speedValue);
-  const cameraSelect = el('select', 'mtvp-select');
+  const cameraSelect = el('select', 'momtvp-select');
   for (const [value, label] of [
     ['firstperson', 'First person'],
     ['thirdperson', 'Third person'],
@@ -166,18 +166,18 @@ export function buildUi(container: HTMLElement): PlayerUi {
   }
   cameraSelect.value = 'firstperson';
   cameraSelect.title = 'Camera';
-  const settingsButton = el('button', 'mtvp-btn mtvp-icon', '⚙');
+  const settingsButton = el('button', 'momtvp-btn momtvp-icon', '⚙');
   settingsButton.title = 'Settings';
-  const fullscreenButton = el('button', 'mtvp-btn mtvp-icon', '⛶');
+  const fullscreenButton = el('button', 'momtvp-btn momtvp-icon', '⛶');
   fullscreenButton.title = 'Fullscreen (f)';
   row.append(playButton, time, grow, speedBox, cameraSelect, settingsButton, fullscreenButton);
   bar.append(seek, row);
   root.append(bar);
 
   // --- the settings flyout ---
-  const menu = el('div', 'mtvp-menu');
+  const menu = el('div', 'momtvp-menu');
   const field = (label: string, input: HTMLElement): HTMLElement => {
-    const wrap = el('div', 'mtvp-field');
+    const wrap = el('div', 'momtvp-field');
     wrap.append(el('label', undefined, label), input);
     return wrap;
   };
@@ -210,16 +210,16 @@ export function buildUi(container: HTMLElement): PlayerUi {
   root.append(menu);
 
   // --- the loading screen ---
-  const loadPanel = el('div', 'mtvp-load');
-  const loadTitle = el('div', 'mtvp-load-title', 'Loading replay');
-  const loadDetail = el('div', 'mtvp-load-sub', '');
-  const loadTrack = el('div', 'mtvp-load-track');
-  const loadFill = el('div', 'mtvp-load-fill');
+  const loadPanel = el('div', 'momtvp-load');
+  const loadTitle = el('div', 'momtvp-load-title', 'Loading replay');
+  const loadDetail = el('div', 'momtvp-load-sub', '');
+  const loadTrack = el('div', 'momtvp-load-track');
+  const loadFill = el('div', 'momtvp-load-fill');
   loadTrack.append(loadFill);
-  const stepsRow = el('div', 'mtvp-load-steps');
+  const stepsRow = el('div', 'momtvp-load-steps');
   const steps = new Map<string, HTMLElement>();
   for (const name of LOADING_STEPS) {
-    const node = el('div', 'mtvp-load-step', name);
+    const node = el('div', 'momtvp-load-step', name);
     steps.set(name, node);
     stepsRow.append(node);
   }

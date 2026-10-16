@@ -3,7 +3,7 @@
  *
  * Codes are part of the public API: match on `error.code`, not on messages.
  */
-export type MtvErrorCode =
+export type MomtvErrorCode =
   /** The buffer is smaller than the structure being read. */
   | 'TRUNCATED'
   /** The file does not start with the 'MMTV' magic. */
@@ -24,16 +24,16 @@ export type MtvErrorCode =
 /**
  * Error thrown by every parsing routine in this package.
  *
- * Carries a stable {@link MtvErrorCode} so callers can branch on the failure
+ * Carries a stable {@link MomtvErrorCode} so callers can branch on the failure
  * kind without string matching.
  */
-export class MtvError extends Error {
+export class MomtvError extends Error {
   /** Stable error code, safe to match on. */
-  readonly code: MtvErrorCode;
+  readonly code: MomtvErrorCode;
 
-  constructor(code: MtvErrorCode, message: string) {
+  constructor(code: MomtvErrorCode, message: string) {
     super(message);
     this.code = code;
-    this.name = 'MtvError';
+    this.name = 'MomtvError';
   }
 }

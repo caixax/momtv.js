@@ -1,7 +1,7 @@
 /*
 LZMA decoder. TypeScript port of js-lzma for in-memory decompression with a
 known output size, specialized for this package (typed arrays, bounds checks,
-MtvError on malformed streams).
+MomtvError on malformed streams).
 
 Based on js-lzma by Juan Mellado, https://github.com/jcmellado/js-lzma
 
@@ -30,7 +30,7 @@ References:
 - "The .lzma File Format" from the xz documentation
 */
 
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 
 /** Decoded LZMA properties byte plus dictionary size. */
 export interface LzmaProperties {
@@ -43,11 +43,11 @@ export interface LzmaProperties {
 /** Decodes the standard 5 byte LZMA properties blob (1 props byte + u32 dict size). */
 export function decodeLzmaProperties(props: Uint8Array): LzmaProperties {
   if (props.length < 5) {
-    throw new MtvError('BAD_LZMA', 'LZMA properties blob is shorter than 5 bytes');
+    throw new MomtvError('BAD_LZMA', 'LZMA properties blob is shorter than 5 bytes');
   }
   let d = props[0]!;
   if (d >= 9 * 5 * 5) {
-    throw new MtvError('BAD_LZMA', `Invalid LZMA properties byte ${d}`);
+    throw new MomtvError('BAD_LZMA', `Invalid LZMA properties byte ${d}`);
   }
   const lc = d % 9;
   d = ~~(d / 9);
@@ -58,7 +58,7 @@ export function decodeLzmaProperties(props: Uint8Array): LzmaProperties {
 }
 
 function bad(message: string): never {
-  throw new MtvError('BAD_LZMA', message);
+  throw new MomtvError('BAD_LZMA', message);
 }
 
 class RangeDecoder {
@@ -234,7 +234,7 @@ class LiteralDecoder {
  * @param props the 5 byte LZMA properties blob.
  * @param src the compressed bytes, starting right after the properties.
  * @param outSize the exact decompressed size.
- * @throws {MtvError} `BAD_LZMA` on any malformed stream.
+ * @throws {MomtvError} `BAD_LZMA` on any malformed stream.
  */
 export function lzmaDecompress(props: Uint8Array, src: Uint8Array, outSize: number): Uint8Array {
   const { lc, lp, pb, dictionarySize } = decodeLzmaProperties(props);

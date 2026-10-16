@@ -7,7 +7,7 @@
  * itself (the count is written down, and the records fill what remains) rather
  * than from a table of versions.
  */
-import { lzmaDecompress, VALVE_LZMA_ID } from '@caixax/mtv';
+import { lzmaDecompress, VALVE_LZMA_ID } from '@caixax/momtv';
 
 /** The game lump that holds the static props, as four characters. */
 const SPRP = 0x73707270;

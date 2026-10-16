@@ -1,13 +1,13 @@
-# @caixax/mtv-player
+# @caixax/momtv-player
 
 Drop-in player for Momentum Mod replays: the [viewer](../viewer) with a loading screen, playback controls and the run readout a runner expects.
 
-Part of [mtv.js](../../README.md).
+Part of [momtv.js](../../README.md).
 
 ## Use it
 
 ```ts
-import { createPlayer } from '@caixax/mtv-player';
+import { createPlayer } from '@caixax/momtv-player';
 
 const player = createPlayer(document.querySelector('#player')!, {
   replay: '/replays/run.momtv',
@@ -19,13 +19,13 @@ const player = createPlayer(document.querySelector('#player')!, {
 
 The container needs a size; the player fills it. Everything else it brings itself: its styles go in as one stylesheet, it fetches nothing from a third party, and it has no dependencies outside this repository.
 
-In a plain page, the bundle puts `MTV` on the window:
+In a plain page, the bundle puts `MomTV` on the window:
 
 ```html
 <div id="player" style="height: 540px"></div>
-<script src="https://unpkg.com/@caixax/mtv-player/dist/mtv-player.global.js"></script>
+<script src="https://unpkg.com/@caixax/momtv-player/dist/momtv-player.global.js"></script>
 <script>
-  MTV.createPlayer(document.getElementById('player'), { replay: 'run.momtv' });
+  MomTV.createPlayer(document.getElementById('player'), { replay: 'run.momtv' });
 </script>
 ```
 

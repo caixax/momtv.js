@@ -1,8 +1,8 @@
 {
-  "name": "mtv.js-monorepo",
+  "name": "momtv.js-monorepo",
   "private": true,
   "version": "0.0.0",
-  "description": "Monorepo for mtv.js, a Momentum Mod replay (.mtv) parser and browser playback library",
+  "description": "Monorepo for momtv.js, a Momentum Mod replay (.momtv) parser and browser playback library",
   "author": "caixax <westlargo@proton.me>",
   "license": "MIT",
   "type": "module",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BitReader, MtvError } from '../src/index.js';
+import { BitReader, MomtvError } from '../src/index.js';
 
 function writeBitsLsb(bits: number[]): Uint8Array {
   const out = new Uint8Array(Math.ceil(bits.length / 8));
@@ -39,11 +39,11 @@ describe('BitReader', () => {
   it('throws TRUNCATED past the end', () => {
     const r = new BitReader(new Uint8Array([0xff]));
     r.readBits(8);
-    expect(() => r.readBit()).toThrowError(MtvError);
+    expect(() => r.readBit()).toThrowError(MomtvError);
     try {
       r.readBits(4);
     } catch (error) {
-      expect((error as MtvError).code).toBe('TRUNCATED');
+      expect((error as MomtvError).code).toBe('TRUNCATED');
     }
   });
 
@@ -52,6 +52,6 @@ describe('BitReader', () => {
     r.readBits(3);
     r.alignByte();
     expect(r.remainingBits).toBe(0);
-    expect(() => r.readBit()).toThrowError(MtvError);
+    expect(() => r.readBit()).toThrowError(MomtvError);
   });
 });

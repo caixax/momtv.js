@@ -8,7 +8,7 @@ export default defineConfig({
       include: ['packages/*/src/**'],
       reporter: ['text', 'html', 'lcov'],
       thresholds: {
-        'packages/mtv/src/**': {
+        'packages/momtv/src/**': {
           statements: 85,
           branches: 75,
           functions: 85,

@@ -1,4 +1,4 @@
-import { entityStateAt, parseReplay, type MtvReplay, type PlayerState } from '@caixax/mtv';
+import { entityStateAt, parseReplay, type MomtvReplay, type PlayerState } from '@caixax/momtv';
 import { parseBsp, type BspMap } from './bsp/bsp-file.js';
 import { linkBrushEntities, type LinkedEntity } from './entities.js';
 import { MapRenderer } from './gl/map-renderer.js';
@@ -50,7 +50,7 @@ export interface LoadInput {
 /** The playback viewer. Create with {@link createViewer}. */
 export interface Viewer {
   readonly clock: PlaybackClock | null;
-  readonly replay: MtvReplay | null;
+  readonly replay: MomtvReplay | null;
   readonly map: BspMap | null;
   load(input: LoadInput): Promise<void>;
   play(): void;
@@ -91,7 +91,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
   const props = new PropRenderer(gl);
   const sky = new SkyRenderer(gl);
 
-  let replay: MtvReplay | null = null;
+  let replay: MomtvReplay | null = null;
   let map: BspMap | null = null;
   let clock: PlaybackClock | null = null;
   let cameraMode: CameraMode = 'firstperson';

@@ -8,7 +8,7 @@
  * edge structures to 32 bit fields and says so in the version of each lump, so
  * both shapes are read.
  */
-import { lzmaDecompress, VALVE_LZMA_ID } from '@caixax/mtv';
+import { lzmaDecompress, VALVE_LZMA_ID } from '@caixax/momtv';
 import { readStaticProps, type StaticProp } from './static-props.js';
 
 /** Lump indices used by the parser. */

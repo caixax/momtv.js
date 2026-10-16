@@ -47,26 +47,26 @@ importers:
 
   packages/cli:
     dependencies:
-      '@caixax/mtv':
+      '@caixax/momtv':
         specifier: workspace:*
-        version: link:../mtv
+        version: link:../momtv
 
-  packages/mtv: {}
+  packages/momtv: {}
 
   packages/player:
     dependencies:
-      '@caixax/mtv':
+      '@caixax/momtv':
         specifier: workspace:*
-        version: link:../mtv
-      '@caixax/mtv-viewer':
+        version: link:../momtv
+      '@caixax/momtv-viewer':
         specifier: workspace:*
         version: link:../viewer
 
   packages/viewer:
     dependencies:
-      '@caixax/mtv':
+      '@caixax/momtv':
         specifier: workspace:*
-        version: link:../mtv
+        version: link:../momtv
 
 packages:
 

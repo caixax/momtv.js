@@ -11,7 +11,7 @@ import {
   parseReplay,
   readHeader,
   readSplits,
-} from '../../packages/mtv/dist/index.js';
+} from '../../packages/momtv/dist/index.js';
 
 const files = process.argv.slice(2);
 const replays = files.length

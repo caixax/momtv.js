@@ -1,4 +1,4 @@
-# mtv.js
+# momtv.js
 
 Read Momentum Mod replays (`.momtv`, MomentumTV) and play them back in the browser on top of the real map.
 
@@ -6,17 +6,17 @@ What hlviewer.js is for GoldSrc, this is for Momentum Mod. Unofficial, and not a
 
 ## Packages
 
-| Package                                 | What it is                                                              |
-| --------------------------------------- | ----------------------------------------------------------------------- |
-| [`@caixax/mtv`](packages/mtv)           | The replay reader. Zero dependencies; browsers, workers and Node.       |
-| [`@caixax/mtv-viewer`](packages/viewer) | The playback engine: map resolution, the WebGL2 renderer and the clock. |
-| [`@caixax/mtv-player`](packages/player) | The drop-in player: loading screen, controls and the run readout.       |
-| [`@caixax/mtv-cli`](packages/cli)       | Command line tools.                                                     |
+| Package                                   | What it is                                                              |
+| ----------------------------------------- | ----------------------------------------------------------------------- |
+| [`@caixax/momtv`](packages/momtv)         | The replay reader. Zero dependencies; browsers, workers and Node.       |
+| [`@caixax/momtv-viewer`](packages/viewer) | The playback engine: map resolution, the WebGL2 renderer and the clock. |
+| [`@caixax/momtv-player`](packages/player) | The drop-in player: loading screen, controls and the run readout.       |
+| [`@caixax/momtv-cli`](packages/cli)       | Command line tools.                                                     |
 
 ## Play a replay
 
 ```ts
-import { createPlayer } from '@caixax/mtv-player';
+import { createPlayer } from '@caixax/momtv-player';
 
 createPlayer(document.querySelector('#player')!, {
   replay: '/replays/run.momtv',
@@ -30,16 +30,16 @@ Or in a plain page, with no build step:
 
 ```html
 <div id="player" style="height: 540px"></div>
-<script src="https://unpkg.com/@caixax/mtv-player/dist/mtv-player.global.js"></script>
+<script src="https://unpkg.com/@caixax/momtv-player/dist/momtv-player.global.js"></script>
 <script>
-  MTV.createPlayer(document.getElementById('player'), { replay: 'run.momtv' });
+  MomTV.createPlayer(document.getElementById('player'), { replay: 'run.momtv' });
 </script>
 ```
 
 ## Read a replay
 
 ```ts
-import { parseReplay, readHeader } from '@caixax/mtv';
+import { parseReplay, readHeader } from '@caixax/momtv';
 
 const data = new Uint8Array(await file.arrayBuffer());
 
@@ -57,9 +57,9 @@ const track = replay.toTrack(); // compact typed arrays for playback
 Or from the command line:
 
 ```sh
-mtv-dump run.momtv            # header, splits, events, decode summary
-mtv-dump run.momtv --csv      # per-tick trajectory for spreadsheets
-mtv-dump run.momtv --json     # full decoded track as JSON
+momtv-dump run.momtv            # header, splits, events, decode summary
+momtv-dump run.momtv --csv      # per-tick trajectory for spreadsheets
+momtv-dump run.momtv --json     # full decoded track as JSON
 ```
 
 ## What it draws

@@ -1,6 +1,6 @@
 import { BitReader } from './bit-reader.js';
 import { ByteReader } from './byte-reader.js';
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 import type { ReplayHeader } from './header.js';
 
 /** One record of the body's event timeline (zone and timer events). */
@@ -104,7 +104,7 @@ const MAX_PROTOBUF_BLOB = 16 * 1024 * 1024;
  * The baselines are indexed but their bit-packed payloads are not decoded
  * here; see the player track decoder for the parts needed for playback.
  *
- * @throws {MtvError} on structural problems.
+ * @throws {MomtvError} on structural problems.
  */
 export function parseBody(
   body: Uint8Array,
@@ -116,7 +116,7 @@ export function parseBody(
   try {
     return parseBodyRevision(body, header, 1);
   } catch (error) {
-    if (!(error instanceof MtvError)) throw error;
+    if (!(error instanceof MomtvError)) throw error;
     return parseBodyRevision(body, header, 2);
   }
 }
@@ -136,7 +136,7 @@ function parseBodyRevision(
   if (revision === 1) {
     const timelineCount = r.u32('timeline count');
     if (timelineCount > MAX_TIMELINE_EVENTS) {
-      throw new MtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
+      throw new MomtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
     }
     for (let i = 0; i < timelineCount; i++) {
       timeline.push({
@@ -154,7 +154,7 @@ function parseBodyRevision(
     // extra bytes {u8 track}{u8 major} when flag is 2 (checkpoint enter)
     const timelineCount = r.u16('timeline count');
     if (timelineCount > MAX_TIMELINE_EVENTS) {
-      throw new MtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
+      throw new MomtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
     }
     for (let i = 0; i < timelineCount; i++) {
       const tick = r.i32('event tick');
@@ -200,7 +200,7 @@ function parseBodyRevision(
   const readGameEvents = (): GameEventDef[] => {
     const size = r.u32('game event list size');
     if (size > MAX_PROTOBUF_BLOB) {
-      throw new MtvError('LIMIT_EXCEEDED', `Game event list declares ${size} bytes`);
+      throw new MomtvError('LIMIT_EXCEEDED', `Game event list declares ${size} bytes`);
     }
     return parseGameEventList(r.raw(size, 'game event list'));
   };
@@ -208,7 +208,7 @@ function parseBodyRevision(
     const size = r.u32('baseline section size');
     const end = r.pos + size;
     if (end > body.length) {
-      throw new MtvError('TRUNCATED', 'Baseline section exceeds the body');
+      throw new MomtvError('TRUNCATED', 'Baseline section exceeds the body');
     }
     const records =
       size > 0 ? indexBaselines(body, r.pos, end, header.baselineCount, knownClassIds) : [];
@@ -259,13 +259,13 @@ function parseBodyRevision(
   const frameSize = r.u32('frame data size');
   const frameData = { offset: r.pos, length: frameSize };
   if (r.pos + frameSize > body.length) {
-    throw new MtvError('TRUNCATED', 'Frame data section exceeds the body');
+    throw new MomtvError('TRUNCATED', 'Frame data section exceeds the body');
   }
 
   // structural validation: both sections must land exactly on the body end,
   // which is what disambiguates the two revisions reliably
   if (frameData.offset + frameData.length !== body.length) {
-    throw new MtvError('BAD_BODY', 'Frame data does not end at the body end');
+    throw new MomtvError('BAD_BODY', 'Frame data does not end at the body end');
   }
 
   return {
@@ -364,14 +364,15 @@ function indexBaselines(
   let pos = start;
   for (let i = 0; i < count; i++) {
     if (pos + 7 > end) {
-      throw new MtvError('BAD_BODY', `Baseline record ${i} runs past the section`);
+      throw new MomtvError('BAD_BODY', `Baseline record ${i} runs past the section`);
     }
     const tick = view.getInt32(pos, true);
     pos += 4;
     let entity = 0;
     let shift = 0;
     for (let b = 0; b < 5; b++) {
-      if (pos >= end) throw new MtvError('BAD_BODY', `Baseline record ${i} has a truncated entity`);
+      if (pos >= end)
+        throw new MomtvError('BAD_BODY', `Baseline record ${i} has a truncated entity`);
       const byte = body[pos++]!;
       entity |= (byte & 0x7f) << shift;
       if ((byte & 0x80) === 0) break;
@@ -380,13 +381,13 @@ function indexBaselines(
     const r = new BitReader(body, pos, end - pos);
     const classId = r.readUBitVar();
     if (!knownClassIds.has(classId)) {
-      throw new MtvError('BAD_BODY', `Baseline record ${i} names unknown class ${classId}`);
+      throw new MomtvError('BAD_BODY', `Baseline record ${i} names unknown class ${classId}`);
     }
     const payloadBits = r.readBits(16);
     const payloadBitOffset = r.bitPos;
     const next = Math.ceil((payloadBitOffset + payloadBits) / 8);
     if (next > end) {
-      throw new MtvError(
+      throw new MomtvError(
         'BAD_BODY',
         `Baseline record ${i} declares ${payloadBits} bits past the section`,
       );

@@ -1,6 +1,6 @@
 import { BitReader } from './bit-reader.js';
 import type { ReplayBody, ReplayClass } from './body-sections.js';
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 import {
   type PropEncoding,
   type PropValue,
@@ -189,7 +189,7 @@ export class FrameReader {
     if (!r.readBit()) return;
     const count = r.readUBitVar();
     if (count > MAX_CREATIONS) {
-      throw new MtvError('BAD_BODY', `a keyframe declares ${count} creations`);
+      throw new MomtvError('BAD_BODY', `a keyframe declares ${count} creations`);
     }
     for (let i = 0; i < count; i++) {
       const baseline = r.readVarInt32();
@@ -207,7 +207,7 @@ export class FrameReader {
     const cached = this.byName.get(className);
     if (cached) return cached;
     const cls = this.classList.find((c) => c.name === className);
-    if (!cls) throw new MtvError('BAD_BODY', `the replay does not record class ${className}`);
+    if (!cls) throw new MomtvError('BAD_BODY', `the replay does not record class ${className}`);
     const state: SlotState = {
       className,
       props: resolveClassProps(cls.name, cls.props),
@@ -223,7 +223,7 @@ export class FrameReader {
     r.readVarInt32();
     const bytes = r.readVarInt32();
     if (bytes > MAX_MESSAGE_BYTES) {
-      throw new MtvError('BAD_BODY', `a trailing message declares ${bytes} bytes`);
+      throw new MomtvError('BAD_BODY', `a trailing message declares ${bytes} bytes`);
     }
     r.skipBits(bytes * 8);
   }
@@ -238,14 +238,14 @@ export class FrameReader {
     if (r.readBit()) {
       const count = r.readUBitVar();
       if (count > MAX_CREATIONS) {
-        throw new MtvError('BAD_BODY', `a frame declares ${count} creations`);
+        throw new MomtvError('BAD_BODY', `a frame declares ${count} creations`);
       }
       for (let i = 0; i < count; i++) {
         const baseline = r.readVarInt32();
         const slot = r.readVarInt32();
         r.readVarInt32(); // serial, not needed to decode
         const name = this.baselineClass.get(baseline);
-        if (!name) throw new MtvError('BAD_BODY', `a creation names baseline ${baseline}`);
+        if (!name) throw new MomtvError('BAD_BODY', `a creation names baseline ${baseline}`);
         this.slots.set(slot, this.stateFor(name));
         this.slotBaseline.set(slot, baseline);
         created.push({ slot, className: name, baseline });
@@ -254,7 +254,7 @@ export class FrameReader {
 
     const updateCount = r.readUBitVar();
     if (updateCount > MAX_DIRECTORY) {
-      throw new MtvError('BAD_BODY', `a frame declares ${updateCount} entity updates`);
+      throw new MomtvError('BAD_BODY', `a frame declares ${updateCount} entity updates`);
     }
     const order: number[] = [];
     for (let i = 0; i < updateCount; i++) order.push(r.readUBitVar());
@@ -262,7 +262,7 @@ export class FrameReader {
     const updates: EntityUpdate[] = [];
     for (const slot of order) {
       const state = this.slots.get(slot);
-      if (!state) throw new MtvError('BAD_BODY', `slot ${slot} holds no known class`);
+      if (!state) throw new MomtvError('BAD_BODY', `slot ${slot} holds no known class`);
       updates.push({ slot, className: state.className, props: this.readPayload(state) });
     }
 
@@ -270,7 +270,7 @@ export class FrameReader {
     if (r.readBit()) {
       const count = r.readUBitVar();
       if (count > MAX_REMOVALS) {
-        throw new MtvError('BAD_BODY', `a frame declares ${count} removals`);
+        throw new MomtvError('BAD_BODY', `a frame declares ${count} removals`);
       }
       for (let i = 0; i < count; i++) {
         const slot = r.readUBitVar();
@@ -286,7 +286,7 @@ export class FrameReader {
       if (!r.readBit()) continue;
       const count = r.readUBitVar();
       if (count > MAX_MESSAGES) {
-        throw new MtvError('BAD_BODY', `a frame declares ${count} ${kind}`);
+        throw new MomtvError('BAD_BODY', `a frame declares ${count} ${kind}`);
       }
       for (let i = 0; i < count; i++) this.readMessage();
     }
@@ -299,7 +299,7 @@ export class FrameReader {
     const r = this.reader;
     const count = r.readUBitVar();
     if (count === 0 || count > state.props.length) {
-      throw new MtvError(
+      throw new MomtvError(
         'BAD_BODY',
         `${state.className} claims ${count} of its ${state.props.length} properties`,
       );
@@ -309,7 +309,7 @@ export class FrameReader {
       const index = r.readBits(this.propBits);
       const encoding = state.props[index];
       if (!encoding) {
-        throw new MtvError('BAD_BODY', `${state.className} has no property ${index}`);
+        throw new MomtvError('BAD_BODY', `${state.className} has no property ${index}`);
       }
       refs.push(encoding.k === 'array' ? { index, element: r.readBits(ELEMENT_BITS) } : { index });
     }

@@ -1,13 +1,13 @@
-# @caixax/mtv-viewer
+# @caixax/momtv-viewer
 
 Playback engine for Momentum Mod replays: it resolves the map a replay was recorded on, reads it, and draws the run in WebGL2.
 
-Part of [mtv.js](https://github.com/caixax/mtv.js). For a player with controls and a run readout, use [@caixax/mtv-player](../player).
+Part of [momtv.js](https://github.com/caixax/momtv.js). For a player with controls and a run readout, use [@caixax/momtv-player](../player).
 
 ## Use it
 
 ```ts
-import { createViewer } from '@caixax/mtv-viewer';
+import { createViewer } from '@caixax/momtv-viewer';
 
 const viewer = createViewer(canvas, {
   // where the game's own files are served from, for whatever a map does not pack

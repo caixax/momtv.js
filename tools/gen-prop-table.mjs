@@ -1,4 +1,4 @@
-// Generates packages/mtv/src/prop-table.ts from the network table dumps in
+// Generates packages/momtv/src/prop-table.ts from the network table dumps in
 // tools/out/dt. A replay's class table names the properties it records but not
 // how they are encoded, so the parser needs the widths and flags the game uses.
 //
@@ -12,7 +12,7 @@ const DT_DIR = 'tools/out/dt';
 
 /** An entity handle, as every class encodes it. */
 const EHANDLE = { kind: 'int', bits: 23, flags: ['UNSIGNED', 'NOSCALE'] };
-const OUT = 'packages/mtv/src/prop-table.ts';
+const OUT = 'packages/momtv/src/prop-table.ts';
 
 /** Property kinds, matching the dump's Type column. */
 const KINDS = {

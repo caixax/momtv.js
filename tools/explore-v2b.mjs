@@ -1,7 +1,7 @@
 // Exploration of the revised body layout found in replays recorded by the
 // current playtest build (same formatVersion 2, different section shapes).
 import { readFileSync } from 'node:fs';
-import { decompressBody, readHeader, readSplits } from '../packages/mtv/dist/index.js';
+import { decompressBody, readHeader, readSplits } from '../packages/momtv/dist/index.js';
 
 const file = process.argv[2];
 const data = new Uint8Array(readFileSync(file));

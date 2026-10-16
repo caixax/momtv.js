@@ -1,9 +1,9 @@
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 
 /**
  * Bounds-checked little endian cursor over a byte buffer.
  *
- * Every read advances the cursor and throws {@link MtvError} with code
+ * Every read advances the cursor and throws {@link MomtvError} with code
  * `TRUNCATED` instead of reading out of bounds, so parsers built on it can
  * never crash or read garbage on short input.
  */
@@ -36,7 +36,7 @@ export class ByteReader {
   /** Throws TRUNCATED unless `n` more bytes are available. */
   need(n: number, what: string): void {
     if (n < 0 || this.pos + n > this.bytes.length) {
-      throw new MtvError(
+      throw new MomtvError(
         'TRUNCATED',
         `Unexpected end of data reading ${what} at offset ${this.pos} ` +
           `(need ${n} bytes, have ${this.bytes.length - this.pos})`,
@@ -140,12 +140,12 @@ export class ByteReader {
     while (end < limit && this.bytes[end] !== 0) end++;
     if (end >= limit) {
       if (end >= this.bytes.length) {
-        throw new MtvError(
+        throw new MomtvError(
           'TRUNCATED',
           `Unterminated string reading ${what} at offset ${this.pos}`,
         );
       }
-      throw new MtvError(
+      throw new MomtvError(
         'LIMIT_EXCEEDED',
         `String longer than ${maxLength} bytes reading ${what} at offset ${this.pos}`,
       );
@@ -158,7 +158,7 @@ export class ByteReader {
   /** Moves the cursor to an absolute offset (bounds-checked). */
   seek(offset: number): void {
     if (offset < 0 || offset > this.bytes.length) {
-      throw new MtvError('TRUNCATED', `Seek to ${offset} is outside the buffer`);
+      throw new MomtvError('TRUNCATED', `Seek to ${offset} is outside the buffer`);
     }
     this.pos = offset;
   }

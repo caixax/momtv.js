@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import {
   GamemodeName,
-  MtvError,
+  MomtvError,
   parseReplay,
   readHeader,
   StyleName,
@@ -10,9 +10,9 @@ import {
   type Gamemode,
   type Style,
   type TrackType,
-} from '@caixax/mtv';
+} from '@caixax/momtv';
 
-const USAGE = `Usage: mtv-dump <file.momtv> [options]
+const USAGE = `Usage: momtv-dump <file.momtv> [options]
 
 Options:
   --summary   header, splits and event summary (default)
@@ -118,6 +118,6 @@ try {
 
   fail(USAGE);
 } catch (error) {
-  if (error instanceof MtvError) fail(`${error.code}: ${error.message}`);
+  if (error instanceof MomtvError) fail(`${error.code}: ${error.message}`);
   throw error;
 }

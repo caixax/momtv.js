@@ -1,6 +1,6 @@
 import { ByteReader, toBytes } from './byte-reader.js';
 import type { Gamemode, ReplayCompression, Style, TrackType } from './enums.js';
-import { MtvError } from './error.js';
+import { MomtvError } from './error.js';
 
 /** 'MMTV' as a little endian int32. */
 export const REPLAY_MAGIC = 0x56544d4d;
@@ -72,7 +72,7 @@ export interface ReplayHeader {
  * Cheap: looks at the first {@link REPLAY_HEADER_SIZE} bytes only, never
  * touches the compressed body. Use it to list replays without full parsing.
  *
- * @throws {MtvError} `TRUNCATED` if the buffer is too short, `BAD_MAGIC` if
+ * @throws {MomtvError} `TRUNCATED` if the buffer is too short, `BAD_MAGIC` if
  * it is not a MomentumTV file, `UNSUPPORTED_VERSION` for unknown versions.
  */
 export function readHeader(data: ArrayBuffer | Uint8Array): ReplayHeader {
@@ -80,7 +80,7 @@ export function readHeader(data: ArrayBuffer | Uint8Array): ReplayHeader {
 
   const magic = r.i32('magic');
   if (magic !== REPLAY_MAGIC) {
-    throw new MtvError(
+    throw new MomtvError(
       'BAD_MAGIC',
       `Not a MomentumTV replay: expected magic 'MMTV', got 0x${(magic >>> 0).toString(16)}`,
     );
@@ -88,7 +88,7 @@ export function readHeader(data: ArrayBuffer | Uint8Array): ReplayHeader {
 
   const formatVersion = r.i32('formatVersion');
   if (formatVersion !== SUPPORTED_FORMAT_VERSION) {
-    throw new MtvError(
+    throw new MomtvError(
       'UNSUPPORTED_VERSION',
       `Unsupported replay format version ${formatVersion} (supported: ${SUPPORTED_FORMAT_VERSION})`,
     );
