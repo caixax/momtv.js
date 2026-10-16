@@ -271,7 +271,8 @@ A keyframe and a frame are the same thing: the engine reads both with one routin
 2. one bit saying whether entities start being recorded this tick. When set: a UBitVar count, then the stream aligns to the next byte and each record is three varints, `{baseline index}{slot}{serial}`
 3. a UBitVar count of the entities whose properties follow, then one entry each. An entry is just the slot as a UBitVar; a serial and a class index follow only when the entity is not already in that slot, which is a decision the reader makes from its own state, not something the stream marks
 4. one property payload per entry, in entry order
-5. one optional trailing section: a flag bit and, when set, the stream aligns and a varint length and that many bytes follow, holding a network message (temp entities, sounds, user or entity messages)
+5. the entities that stop being recorded: a flag bit and, when set, a count and that many slots, all as UBitVars
+6. up to four optional trailing sections, each a flag bit and, when set, a length and that many bytes, holding a network message: temp entities, sounds, user messages and entity messages, in that order
 
 A property payload is:
 
@@ -282,6 +283,8 @@ A property payload is:
 The references are not sorted: a frame lists the properties in the order the recorder noticed them changing.
 
 Entities that only start being recorded this tick contribute nothing beyond their creation record. Their state comes from their baseline, which is why a creation names one.
+
+The game's own playback logging confirms the whole shape tick by tick. With `mom_tv_debug` at exactly 2 the engine prints a `<REPLAY>` line for every entity it creates or removes and every message it plays, and those lines line up with the stream: at the tick where the log reports twelve entities starting to be recorded in slots 16 to 27, the frame at byte 2208 of the agtricks sample carries exactly twelve creation records naming baselines 12 to 23 and those same slots, in that order; at the tick where the log reports three creations in slots 28 to 30 and twelve removals, the frame at byte 2656 carries exactly that, with the removal list of slots 16 to 27 where this grammar puts it.
 
 Worked example, the frame for tick 101 of the agtricks sample, which the keyframe index pins to 156 bytes starting at byte 2812: no creations, one entry for slot 0, eight properties. It decodes to `m_vecOrigin = (-3200, -3519.70, -396.04)`, `m_vecVelocity = (0, 30, -8)`, `wishVel = (0, 300)`, `m_fEffects` and `m_angRotation`. The vertical velocity of -8 is the value the run splits in the header record for that zone transition, from a part of the file that has nothing to do with the body, so the decode is right.
 
@@ -299,6 +302,12 @@ Two consequences for a parser:
 - The entity to class map is a function of the tick. It cannot be read once at the start, which is why revision 2 (whose baseline section is empty) still works: the creations in the stream are what establish the map.
 
 This also confirms the baseline record fields independently. The recorder prints `Created baseline <n> (<class> @ <edict>:<bits>)`, and those bit counts vary per entity of the same class (seventeen `CFuncBrush` baselines ranging from 91 to 972 bits), so a baseline payload is a property subset, not a fixed dump of every property in the class.
+
+## What is still undecoded
+
+The property payloads of classes other than the player do not decode with the widths the game's network table dump gives, so a frame cannot yet be walked end to end. The player's payload is exact, and so is everything that surrounds it, which is why the player's position and velocity come out right and agree with an independent decode of the same ticks.
+
+The dump used here was taken on a different map, so it need not describe the classes a given replay records: the suspects are the array properties, whose element widths are inferred rather than read, a 64 bit integer, and a string. A class table dumped on the same map as the replay would settle it.
 
 ## Open questions
 
