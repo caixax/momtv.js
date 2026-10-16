@@ -26,6 +26,12 @@ export interface ViewerOptions extends ResolveMapOptions, LoadMaterialsOptions {
   noProps?: boolean;
   /** Skip the map's sky. */
   noSky?: boolean;
+  /**
+   * Called while a map loads, so a host can show what it is waiting for.
+   *
+   * @param stage - what is being read: `materials`, `props` or `sky`
+   */
+  onLoadStatus?: (stage: string, done: number, total: number) => void;
 }
 
 /** What to load: a replay with an optional explicit map. */
@@ -52,6 +58,10 @@ export interface Viewer {
   seek(seconds: number): void;
   setSpeed(speed: number): void;
   setCamera(mode: CameraMode): void;
+  /** Turns one layer of the scene on or off, without loading anything again. */
+  setLayer(layer: 'props' | 'sky', visible: boolean): void;
+  /** What the loaded map put on screen. */
+  readonly counts: { props: number; propBatches: number; movingParts: number };
   /** Subscribes to per-frame player state updates. Returns an unsubscriber. */
   onTick(fn: (state: PlayerState) => void): () => void;
   destroy(): void;
@@ -89,6 +99,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
   /** The map's moving parts, paired with what the replay recorded. */
   let moving: LinkedEntity[] = [];
   let movedTick = -1;
+  const layers = { props: true, sky: true };
   const tickListeners = new Set<(state: PlayerState) => void>();
 
   /** Puts every recorded brush entity where it was on a tick. */
@@ -179,9 +190,9 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
           ? poseToCamera(thirdPersonCamera(state))
           : poseToCamera(firstPersonCamera(state));
     const shot = { ...cam, fovYDegrees: options.fov ?? 90 };
-    sky.render(shot);
+    if (layers.sky) sky.render(shot);
     renderer.render(shot);
-    props.render(shot);
+    if (layers.props) props.render(shot);
   };
 
   const poseToCamera = (pose: {
@@ -216,14 +227,25 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
       }
       map = parseBsp(mapBytes);
       const resolver = await createMaterialResolver(map, options);
-      const materials = options.noTextures ? undefined : await loadMaterials(map, options);
+      const materialOptions: LoadMaterialsOptions = { ...options };
+      if (options.onLoadStatus) {
+        materialOptions.onProgress = (done, total) =>
+          options.onLoadStatus?.('materials', done, total);
+      }
+      const materials = options.noTextures
+        ? undefined
+        : await loadMaterials(map, materialOptions);
       renderer.upload(map, materials);
       if (!options.noSky && !options.noTextures) {
+        options.onLoadStatus?.('sky', 0, 1);
         sky.upload(await loadSky(map.skyName, resolver));
       }
       if (!options.noProps && !options.noTextures) {
         const propOptions: LoadPropsOptions = {};
         if (options.onMissing) propOptions.onMissing = options.onMissing;
+        if (options.onLoadStatus) {
+          propOptions.onProgress = (done, total) => options.onLoadStatus?.('props', done, total);
+        }
         props.upload(await loadStaticProps(map, resolver, propOptions));
       }
       // The map's moving parts: traps, doors, platforms, as the replay saw them.
@@ -254,6 +276,16 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
     },
     setCamera(mode: CameraMode) {
       cameraMode = mode;
+    },
+    setLayer(layer, visible) {
+      layers[layer] = visible;
+    },
+    get counts() {
+      return {
+        props: props.stats.instances,
+        propBatches: props.stats.batches,
+        movingParts: moving.filter((link) => link.track.moves).length,
+      };
     },
     onTick(fn: (state: PlayerState) => void): () => void {
       tickListeners.add(fn);
