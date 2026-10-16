@@ -1,5 +1,11 @@
 # @caixax/momtv-cli
 
+## 0.1.1
+
+### Patch Changes
+
+- 77308ec: Show a dash instead of NaN for the run timer of timeline events. The compact timeline newer replays write does not carry a timer value per event, so the dump prints a dash and the player labels its seek marks with where the event sits in the playback.
+
 ## 0.1.0
 
 ### Minor Changes

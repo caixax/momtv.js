@@ -1,6 +1,6 @@
 {
   "name": "@caixax/momtv-player",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Drop-in player for Momentum Mod replays: the viewer with a loading screen, playback controls and a run HUD",
   "author": "caixax <westlargo@proton.me>",
   "license": "MIT",
