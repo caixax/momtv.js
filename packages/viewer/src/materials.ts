@@ -1,6 +1,7 @@
+import { firstOf, looseSource, openVpk, pakfileSource, type AssetSource } from './assets.js';
 import type { BspMap } from './bsp/bsp-file.js';
-import { readPakEntry, readPakfile, type PakEntry } from './bsp/pakfile.js';
-import { parseVmtBaseTexture, parseVtf, type DecodedTexture } from './bsp/vtf.js';
+import { applyPatch, isToolMaterial, parseVmt, type Vmt } from './bsp/vmt.js';
+import { parseVtf, type DecodedTexture } from './bsp/vtf.js';
 
 /** A resolved material: a texture when one was found, a flat colour otherwise. */
 export interface LoadedMaterial {
@@ -8,98 +9,148 @@ export interface LoadedMaterial {
   texture: DecodedTexture | undefined;
   /** Flat colour fallback from the map's texdata reflectivity. */
   color: [number, number, number];
+  /** False for tool brushes, which the game never draws. */
+  drawn: boolean;
+  /** Cut the surface away where the texture is transparent, as foliage needs. */
+  alphaTest: boolean;
+  /** Threshold for that cut. */
+  alphaTestReference: number;
+  /** Blend the surface with what is behind it, as glass needs. */
+  translucent: boolean;
+  /** Constant opacity on top of the texture's alpha. */
+  alpha: number;
 }
 
 /** Options for {@link loadMaterials}. */
 export interface LoadMaterialsOptions {
   /**
-   * Base URL for assets the map does not pack (materials that live in the
-   * game's VPK files). Looked up as `{assetsBaseUrl}/materials/{name}.vtf`.
+   * Base URL for loose game files, looked up as `{assetsBaseUrl}/materials/x.vtf`.
+   * Serve the game's own directory here and the viewer finds the materials a
+   * map does not pack.
    */
   assetsBaseUrl?: string;
+  /**
+   * URLs of `_dir.vpk` files to read materials from, in order of preference.
+   * Each is read with range requests, so pointing at a multi gigabyte archive
+   * set costs only the bytes the map actually uses.
+   */
+  vpkUrls?: readonly string[];
+  /** Extra asset sources, tried after the map's own pakfile. */
+  assetSources?: readonly AssetSource[];
   fetch?: typeof fetch;
   /** Called as materials resolve, for progress reporting. */
   onProgress?: (done: number, total: number) => void;
+  /** Called once per material that could not be resolved. */
+  onMissing?: (name: string) => void;
 }
+
+/** How many materials are resolved at once. */
+const CONCURRENCY = 8;
 
 /**
  * Resolves every material of a map to a texture or a flat colour.
  *
- * Materials are looked up in the map's own pakfile first, then under
- * `assetsBaseUrl`. Anything still missing keeps its flat colour, so a map
- * always renders even with no assets available.
+ * The map's own pakfile comes first, then whatever sources the caller supplies,
+ * then loose files under `assetsBaseUrl`. Anything still missing keeps its flat
+ * colour, so a map always renders even with no assets available.
  */
 export async function loadMaterials(
   map: BspMap,
   options: LoadMaterialsOptions = {},
 ): Promise<LoadedMaterial[]> {
   const fetchImpl = options.fetch ?? (typeof fetch === 'function' ? fetch : undefined);
-  const entries = readPakfile(map.pakfile);
-  const byName = new Map<string, PakEntry>();
-  for (const entry of entries) byName.set(entry.name, entry);
-
-  const out: LoadedMaterial[] = [];
-  let done = 0;
-  for (const material of map.materials) {
-    const color: [number, number, number] = [
-      Math.min(1, Math.abs(material.reflectivity[0])),
-      Math.min(1, Math.abs(material.reflectivity[1])),
-      Math.min(1, Math.abs(material.reflectivity[2])),
-    ];
-    let texture: DecodedTexture | undefined;
-    try {
-      texture = await resolveTexture(material.name, map.pakfile, byName, options, fetchImpl);
-    } catch {
-      texture = undefined; // keep the flat colour
+  const sources: AssetSource[] = [pakfileSource(map.pakfile)];
+  if (options.assetSources) sources.push(...options.assetSources);
+  if (fetchImpl) {
+    for (const url of options.vpkUrls ?? []) {
+      // A VPK that will not open is simply one fewer place to look.
+      const source = await openVpk(url, fetchImpl).catch(() => undefined);
+      if (source) sources.push(source);
     }
-    out.push({ name: material.name, texture, color });
-    options.onProgress?.(++done, map.materials.length);
+    if (options.assetsBaseUrl) sources.push(looseSource(options.assetsBaseUrl, fetchImpl));
   }
-  return out;
-}
-
-async function resolveTexture(
-  materialName: string,
-  pak: Uint8Array,
-  byName: Map<string, PakEntry>,
-  options: LoadMaterialsOptions,
-  fetchImpl: typeof fetch | undefined,
-): Promise<DecodedTexture | undefined> {
-  // tool materials have no useful texture
-  if (materialName.startsWith('tools/')) return undefined;
+  const assets = firstOf(sources);
 
   const decoder = new TextDecoder('latin1');
-  // a material name from texdata is a path under materials/, without extension
-  let texturePath = materialName;
-  const vmtEntry = byName.get(`materials/${materialName}.vmt`);
-  if (vmtEntry) {
-    const vmt = decoder.decode(await readPakEntry(pak, vmtEntry));
-    texturePath = parseVmtBaseTexture(vmt) ?? materialName;
-  } else if (options.assetsBaseUrl && fetchImpl) {
-    const vmt = await fetchText(
-      `${trimSlash(options.assetsBaseUrl)}/materials/${materialName}.vmt`,
-      fetchImpl,
-    );
-    if (vmt) texturePath = parseVmtBaseTexture(vmt) ?? materialName;
-  }
+  const vmtCache = new Map<string, Vmt | undefined>();
+  const readVmt = async (path: string, depth = 0): Promise<Vmt | undefined> => {
+    const key = path.toLowerCase();
+    if (vmtCache.has(key)) return vmtCache.get(key);
+    const bytes = await assets.read(`materials/${key}.vmt`);
+    let vmt = bytes ? parseVmt(decoder.decode(bytes)) : undefined;
+    // A patch only overrides keys of the material it includes.
+    if (vmt?.include && depth < 4) {
+      const included = await readVmt(vmt.include, depth + 1);
+      if (included) vmt = applyPatch(vmt, included);
+    }
+    vmtCache.set(key, vmt);
+    return vmt;
+  };
 
-  const vtfEntry = byName.get(`materials/${texturePath}.vtf`);
-  if (vtfEntry) return parseVtf(await readPakEntry(pak, vtfEntry));
+  const textureCache = new Map<string, DecodedTexture | undefined>();
+  const readTexture = async (path: string): Promise<DecodedTexture | undefined> => {
+    const key = path.toLowerCase();
+    if (textureCache.has(key)) return textureCache.get(key);
+    const bytes = await assets.read(`materials/${key}.vtf`);
+    let decoded: DecodedTexture | undefined;
+    if (bytes) {
+      try {
+        decoded = parseVtf(bytes);
+      } catch {
+        decoded = undefined; // a texture this cannot decode keeps the flat colour
+      }
+    }
+    textureCache.set(key, decoded);
+    return decoded;
+  };
 
-  if (options.assetsBaseUrl && fetchImpl) {
-    const url = `${trimSlash(options.assetsBaseUrl)}/materials/${texturePath}.vtf`;
-    const res = await fetchImpl(url).catch(() => undefined);
-    if (res?.ok) return parseVtf(new Uint8Array(await res.arrayBuffer()));
-  }
-  return undefined;
-}
-
-async function fetchText(url: string, fetchImpl: typeof fetch): Promise<string | undefined> {
-  const res = await fetchImpl(url).catch(() => undefined);
-  if (!res?.ok) return undefined;
-  return res.text();
-}
-
-function trimSlash(s: string): string {
-  return s.replace(/\/$/, '');
+  const out: LoadedMaterial[] = new Array(map.materials.length);
+  let done = 0;
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = next++;
+      const material = map.materials[index];
+      if (!material) return;
+      const name = material.name.replace(/\\/g, '/').toLowerCase();
+      const color: [number, number, number] = [
+        Math.min(1, Math.abs(material.reflectivity[0])),
+        Math.min(1, Math.abs(material.reflectivity[1])),
+        Math.min(1, Math.abs(material.reflectivity[2])),
+      ];
+      const loaded: LoadedMaterial = {
+        name: material.name,
+        texture: undefined,
+        color,
+        drawn: !isToolMaterial(name),
+        alphaTest: false,
+        alphaTestReference: 0.5,
+        translucent: false,
+        alpha: 1,
+      };
+      if (loaded.drawn) {
+        const vmt = await readVmt(name).catch(() => undefined);
+        if (vmt) {
+          loaded.alphaTest = vmt.alphaTest;
+          loaded.alphaTestReference = vmt.alphaTestReference;
+          loaded.translucent = vmt.translucent;
+          loaded.alpha = vmt.alpha;
+          if (vmt.invisible) loaded.drawn = false;
+        }
+        if (loaded.drawn) {
+          // A material without a definition still often has a texture of the
+          // same name, which is how many map textures are shipped.
+          loaded.texture = await readTexture(vmt?.baseTexture ?? name).catch(() => undefined);
+          if (!loaded.texture && vmt?.baseTexture && vmt.baseTexture !== name) {
+            loaded.texture = await readTexture(name).catch(() => undefined);
+          }
+          if (!loaded.texture) options.onMissing?.(material.name);
+        }
+      }
+      out[index] = loaded;
+      options.onProgress?.(++done, map.materials.length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, map.materials.length) }, worker));
+  return out;
 }

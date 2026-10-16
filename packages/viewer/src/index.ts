@@ -40,4 +40,14 @@ export { loadMaterials, type LoadedMaterial, type LoadMaterialsOptions } from '.
 export { readPakfile, readPakEntry, type PakEntry } from './bsp/pakfile.js';
 export { parseVpkDirectory, readVpkEntry, type VpkDirectory, type VpkEntry } from './bsp/vpk.js';
 export { parseVtf, parseVmtBaseTexture, type DecodedTexture } from './bsp/vtf.js';
+export { applyPatch, isToolMaterial, parseVmt, type Vmt } from './bsp/vmt.js';
+export { decompressZstd } from './bsp/zstd.js';
+export {
+  firstOf,
+  looseSource,
+  openVpk,
+  pakfileSource,
+  vpkSource,
+  type AssetSource,
+} from './assets.js';
 export { createViewer, type LoadInput, type Viewer, type ViewerOptions } from './viewer.js';
