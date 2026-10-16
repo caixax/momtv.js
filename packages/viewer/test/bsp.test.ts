@@ -75,6 +75,57 @@ describe.skipIf(!hasRealBsp)('parseBsp on a real Momentum map (local only)', () 
     expect(tris).toBeGreaterThan(1000);
   });
 
+  it('builds a lightmap atlas with coordinates for nearly every vertex', () => {
+    expect(map.lightmap).toBeDefined();
+    const lm = map.lightmap!;
+    expect(lm.width).toBeGreaterThan(0);
+    expect(lm.height).toBeGreaterThan(0);
+    expect(lm.pixels).toHaveLength(lm.width * lm.height * 4);
+    let withUv = 0;
+    let total = 0;
+    for (const group of map.world) {
+      expect(group.lightmapUvs).toHaveLength((group.positions.length / 3) * 2);
+      for (let i = 0; i < group.lightmapUvs.length; i += 2) {
+        total++;
+        const u = group.lightmapUvs[i]!;
+        const v = group.lightmapUvs[i + 1]!;
+        if (u >= 0) {
+          withUv++;
+          expect(u).toBeLessThanOrEqual(1);
+          expect(v).toBeGreaterThanOrEqual(0);
+          expect(v).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+    expect(withUv / total).toBeGreaterThan(0.95);
+  });
+
+  it('emits no triangle that leaves its face plane', () => {
+    let nonPlanar = 0;
+    for (const group of map.world) {
+      for (let i = 0; i < group.indices.length; i += 3) {
+        const p = [0, 1, 2].map((k) => {
+          const vi = group.indices[i + k]! * 3;
+          return [group.positions[vi]!, group.positions[vi + 1]!, group.positions[vi + 2]!];
+        });
+        const u = [p[1]![0]! - p[0]![0]!, p[1]![1]! - p[0]![1]!, p[1]![2]! - p[0]![2]!];
+        const w = [p[2]![0]! - p[0]![0]!, p[2]![1]! - p[0]![1]!, p[2]![2]! - p[0]![2]!];
+        const n = [
+          u[1]! * w[2]! - u[2]! * w[1]!,
+          u[2]! * w[0]! - u[0]! * w[2]!,
+          u[0]! * w[1]! - u[1]! * w[0]!,
+        ];
+        const area = Math.hypot(n[0]!, n[1]!, n[2]!) / 2;
+        if (area < 0.01) continue; // degenerate slivers are invisible
+        const vi0 = group.indices[i]! * 3;
+        const sn = [group.normals[vi0]!, group.normals[vi0 + 1]!, group.normals[vi0 + 2]!];
+        const dot = Math.abs((n[0]! * sn[0]! + n[1]! * sn[1]! + n[2]! * sn[2]!) / (area * 2));
+        if (dot < 0.9) nonPlanar++;
+      }
+    }
+    expect(nonPlanar).toBe(0);
+  });
+
   it('finds the player start where the replay says the player spawned', () => {
     // the bhop_eazy fixture replay's baseline origin is (-451, -254, 64)
     expect(map.playerStart).toBeDefined();

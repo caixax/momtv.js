@@ -17,6 +17,7 @@ const LUMP = {
   TEXINFO: 6,
   FACES: 7,
   LIGHTING: 8,
+  LIGHTING_HDR: 53,
   EDGES: 12,
   SURFEDGES: 13,
   MODELS: 14,
@@ -56,7 +57,17 @@ export interface BspMeshGroup {
   normals: Float32Array;
   /** uv per vertex (texture coordinates in texel space, unnormalized). */
   uvs: Float32Array;
+  /** Normalized lightmap atlas coordinates per vertex. */
+  lightmapUvs: Float32Array;
   indices: Uint32Array;
+}
+
+/** The baked lighting of a map, packed into one RGBA atlas. */
+export interface Lightmap {
+  width: number;
+  height: number;
+  /** RGBA8 pixels of the atlas. */
+  pixels: Uint8Array;
 }
 
 /** A brush model: model 0 is the world, others belong to brush entities. */
@@ -81,6 +92,8 @@ export interface BspMap {
   models: BspModel[];
   /** Raw pakfile bytes (a zip), for later texture extraction. */
   pakfile: Uint8Array;
+  /** Baked lighting atlas, when the map has a lighting lump. */
+  lightmap: Lightmap | undefined;
   /** worldspawn's skyname, if present. */
   skyName: string | undefined;
   /** info_player_start origin, if present. */
@@ -186,6 +199,10 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const planes = readLump(file, LUMP.PLANES);
   const models = readLump(file, LUMP.MODELS);
   const pakfile = readLump(file, LUMP.PAKFILE);
+  // HDR lighting is preferred when the map ships it, matching what the game
+  // renders on modern hardware
+  const lightingHdr = readLump(file, LUMP.LIGHTING_HDR);
+  const lighting = lightingHdr.length > 0 ? lightingHdr : readLump(file, LUMP.LIGHTING);
 
   const vertView = new DataView(vertexes.buffer, vertexes.byteOffset, vertexes.byteLength);
   const edgeView = new DataView(edges.buffer, edges.byteOffset, edges.byteLength);
@@ -258,11 +275,84 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
     });
   }
 
+  // --- lightmap atlas ---
+  // Every lit face owns a small rectangle of luxels in the lighting lump.
+  // They are packed into one atlas with a shelf layout so the renderer can
+  // draw the whole map with a single lightmap texture.
+  interface LightmapRect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }
+  const faceLightmap = new Map<number, LightmapRect>();
+  let lightmapAtlas: Lightmap | undefined;
+  if (lighting.length > 0) {
+    const PAD = 1;
+    const ATLAS_WIDTH = 2048;
+    const placements: { face: number; w: number; h: number; lightofs: number }[] = [];
+    for (let f = 0; f < faceCount; f++) {
+      const fo = f * FACE_SIZE;
+      const lightofs = faceView.getInt32(fo + 20, true);
+      if (lightofs < 0 || lightofs >= lighting.length) continue;
+      const w = faceView.getInt32(fo + 36, true) + 1;
+      const h = faceView.getInt32(fo + 40, true) + 1;
+      if (w <= 0 || h <= 0 || w > 512 || h > 512) continue;
+      placements.push({ face: f, w, h, lightofs });
+    }
+    // tallest first keeps the shelves tight
+    placements.sort((a, b) => b.h - a.h);
+    let shelfX = 0;
+    let shelfY = 0;
+    let shelfHeight = 0;
+    for (const p of placements) {
+      const w = p.w + PAD;
+      const h = p.h + PAD;
+      if (shelfX + w > ATLAS_WIDTH) {
+        shelfX = 0;
+        shelfY += shelfHeight;
+        shelfHeight = 0;
+      }
+      faceLightmap.set(p.face, { x: shelfX, y: shelfY, w: p.w, h: p.h });
+      shelfX += w;
+      if (h > shelfHeight) shelfHeight = h;
+    }
+    const atlasHeight = Math.max(1, shelfY + shelfHeight);
+    if (atlasHeight <= 8192) {
+      const pixels = new Uint8Array(ATLAS_WIDTH * atlasHeight * 4).fill(255);
+      for (const p of placements) {
+        const rect = faceLightmap.get(p.face);
+        if (!rect) continue;
+        for (let y = 0; y < rect.h; y++) {
+          for (let x = 0; x < rect.w; x++) {
+            const sample = p.lightofs + (y * rect.w + x) * 4;
+            if (sample + 3 >= lighting.length) continue;
+            // ColorRGBExp32: three mantissas and a shared exponent
+            const exp = (lighting[sample + 3]! << 24) >> 24;
+            const scale = Math.pow(2, exp) * 0.5;
+            const d = ((rect.y + y) * ATLAS_WIDTH + rect.x + x) * 4;
+            for (let c = 0; c < 3; c++) {
+              const linear = lighting[sample + c]! * scale;
+              // the samples are linear light; approximate the game's gamma
+              const v = Math.pow(Math.min(1, linear / 255), 1 / 2.2) * 255;
+              pixels[d + c] = Math.max(0, Math.min(255, Math.round(v)));
+            }
+            pixels[d + 3] = 255;
+          }
+        }
+      }
+      lightmapAtlas = { width: ATLAS_WIDTH, height: atlasHeight, pixels };
+    } else {
+      faceLightmap.clear();
+    }
+  }
+
   // triangulate faces grouped by material, per model
   interface Group {
     positions: number[];
     normals: number[];
     uvs: number[];
+    lightmapUvs: number[];
     indices: number[];
   }
 
@@ -282,12 +372,15 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
       let flags = 0;
       let texdataIdx = -1;
       let tv: number[] | null = null;
+      let lv: number[] | null = null;
       if (texinfoIdx >= 0 && (texinfoIdx + 1) * 72 <= texinfo.length) {
         const to = texinfoIdx * 72;
         flags = tiView.getInt32(to + 64, true);
         texdataIdx = tiView.getInt32(to + 68, true);
         tv = [];
         for (let i = 0; i < 8; i++) tv.push(tiView.getFloat32(to + i * 4, true));
+        lv = [];
+        for (let i = 0; i < 8; i++) lv.push(tiView.getFloat32(to + 32 + i * 4, true));
       }
       if (flags & NON_RENDER_FLAGS) continue;
 
@@ -307,13 +400,16 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
         }
       }
 
+      const rect = faceLightmap.get(f);
+      const lightmapMinsU = faceView.getInt32(fo + 28, true);
+      const lightmapMinsV = faceView.getInt32(fo + 32, true);
       const materialIndex =
         texdataIdx >= 0 && texdataIdx < materialOfTexdata.length
           ? materialOfTexdata[texdataIdx]!
           : -1;
       let group = groups.get(materialIndex);
       if (!group) {
-        group = { positions: [], normals: [], uvs: [], indices: [] };
+        group = { positions: [], normals: [], uvs: [], lightmapUvs: [], indices: [] };
         groups.set(materialIndex, group);
       }
 
@@ -345,6 +441,18 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
         } else {
           group.uvs.push(0, 0);
         }
+        // lightmap coordinates: luxel space, shifted by the face's minimum
+        // and normalized against the atlas
+        if (lv && rect && lightmapAtlas) {
+          const lu = x * lv[0]! + y * lv[1]! + z * lv[2]! + lv[3]! - lightmapMinsU;
+          const lvv = x * lv[4]! + y * lv[5]! + z * lv[6]! + lv[7]! - lightmapMinsV;
+          group.lightmapUvs.push(
+            (rect.x + Math.max(0, Math.min(rect.w - 1, lu)) + 0.5) / lightmapAtlas.width,
+            (rect.y + Math.max(0, Math.min(rect.h - 1, lvv)) + 0.5) / lightmapAtlas.height,
+          );
+        } else {
+          group.lightmapUvs.push(-1, -1);
+        }
         emitted++;
       }
       for (let t = 2; t < emitted; t++) {
@@ -360,6 +468,7 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
         positions: new Float32Array(g.positions),
         normals: new Float32Array(g.normals),
         uvs: new Float32Array(g.uvs),
+        lightmapUvs: new Float32Array(g.lightmapUvs),
         indices: new Uint32Array(g.indices),
       });
     }
@@ -386,6 +495,7 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
     world,
     models: bspModels,
     pakfile,
+    lightmap: lightmapAtlas,
     skyName: worldspawn?.['skyname'],
     playerStart: parseVec3(start?.['origin']),
   };

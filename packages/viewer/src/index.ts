@@ -32,6 +32,7 @@ export {
   type BspMap,
   type BspMaterial,
   type BspMeshGroup,
+  type Lightmap,
   type BspModel,
 } from './bsp/bsp-file.js';
 export { MapRenderer, type RenderCamera } from './gl/map-renderer.js';
