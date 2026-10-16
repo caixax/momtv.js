@@ -253,29 +253,29 @@ Current quality, measured as the share of moving ticks whose position does not a
 
 The remaining stutter is concentrated, not spread out: on agtricks all but five of the frozen ticks fall in four runs, and each run begins on a timeline zone event. The frame that follows such an event updates many entities at once and does not start with the player block (an entity count of 14 instead of the usual 4), so the walker loses the thread until the next keyframe anchor. Candidate scoring by motion continuity was measured and does not help; what closes this is decoding the non-player blocks, which needs the entity to class mapping and the per class property encodings.
 
-## Body revision 2 (current playtest builds) [verified]
-
-Replays written by current 0.10.x playtest builds keep formatVersion 2 in the header but revise the body layout. A parser distinguishes the revisions structurally (revision 1 parses to the exact body end or it is revision 2). Differences:
-
-- Timeline: `uint16 count`, then compact records `{int32 tick}{uint8 flag}` with two extra bytes `{uint8 track}{uint8 major}` when flag is 2 (checkpoint enter). Flags observed: 3 run start, 0 unknown, 2 checkpoint, 1 final tick. No run-timer double anymore.
-- The player class now has 49 properties (propBits 7 would overflow 6 bits; the header says 6 and frames use 6-bit property indices). New properties include wishVel, moveStatus, acceleration, maxspeed, friction, several EndTick fields, m_flGroundPositionZ, m_iLandTick/m_iJumpTick, m_hActiveWeapon and m_hPrimaryTimer; widths confirmed against the game's own class table dump.
-- The baseline section size is 0: initial entity state lives in the tick 0 keyframe instead.
-- Keyframe index: the tick 0 entry is implicit (8 zero bytes, no frame offset), followed by keyFrameCount - 1 full 12 byte entries with the same {tick, keyframeOffset, frameOffset} layout as revision 1.
-- Frames keep the same container ({6-bit block count}{entity blocks}, player first) but each block now writes all property indices first and then the values in that order (classic Source field list), instead of interleaving index and value.
-- Frame data may start with a prologue before the first frame in some gamemodes (observed in defrag and deathrun replays); the frame walker skips it.
-
-Oracle note: on maps with push physics (boosters, bumpers, conveyors) the recorded m_vecVelocity legitimately disagrees with per-tick position deltas while the push is acting, since base velocity is not part of the recorded property set. Plain bhop runs validate at over 99%.
-
-## Frame location and its limits [verified by measurement]
-
-Only the leading player block of a frame is decoded; the trailing entity blocks (viewmodel, weapons, zones, map entities) are not mapped, so a frame's true end is unknown and the next frame has to be located rather than computed. Two measurements bound how well that can work:
+Two further measurements bound how well locating can ever work:
 
 - Candidate density: in the first 4000 bytes of bhop_badwater there are 203 byte offsets that parse as a valid player block, for about 100 real frames. Roughly half of the candidates are frame-shaped runs of bits inside the trailing blocks.
 - The position is the discriminator: of those 203 candidates only 80 carry `m_vecOrigin`, which matches the real frame count closely. Walking a span taking only position-bearing candidates reproduces the known spans almost exactly (a 15 tick span between two keyframe anchors places exactly 15 frames and ends on the anchor byte; a 1041 tick span places 1026).
 
-Two facts make the frame count checkable: the keyframe index pins known ticks to known byte offsets, so between two anchors both the tick count and the byte range are exact.
+The keyframe index is what makes any of this checkable: it pins known ticks to known byte offsets, so between two anchors both the tick count and the byte range are exact.
 
-What remains before playback can be bit exact: the entity to class mapping (in revision 1 it comes from the baselines, in revision 2 it is folded into the tick 0 keyframe, which is not parsed yet) and the per class property encodings for the non-player classes. With those, every block of a frame can be decoded and frames become exactly contiguous, removing the need to locate them. Replays where the player is not the first recorded entity (observed on entity-heavy maps such as a defrag pinball map) cannot be decoded at all until then.
+Replays where the player is not the first recorded entity (observed on entity-heavy maps such as a defrag pinball map) cannot be decoded at all until the non-player blocks are mapped.
+
+## Entity slots [verified from the game's own logging]
+
+Entities are not referenced by their edict index. The recorder assigns each one a small **slot** and the stream refers to that slot, which is why a frame's entity field stays narrow even though edict indices reach into the hundreds.
+
+Slots are recycled. When an entity stops being recorded its slot is released, and the next entity to appear takes a free one, so the same slot denotes different entities (and different classes) at different ticks. There are two pools: the recorded player takes slot 0 and its attachments (view model, weapons) take low slots, while map entities start at 16.
+
+A worked example from one session, recorded by the game at `mom_tv_debug 3`: the player (edict 1) took slot 0, seventeen `CFuncBrush` entities took slots 16 to 32, six `CMomentumZoneRegion` entities took 33 to 38, the timer took 39, and only then did the view model (edict 136) and the two weapons (137, 138) take slots 1, 2 and 3. Later the brushes left and reappeared repeatedly as the camera moved, each time reusing the lowest free slots from 16 up.
+
+Two consequences for a parser:
+
+- A frame must carry entity creations and removals, not just property deltas, since the slot map changes during the run.
+- The entity to class map is a function of the tick. It cannot be read once at the start, which is why revision 2 (whose baseline section is empty) still works: the creations in the stream are what establish the map.
+
+This also confirms the baseline record fields independently. The recorder prints `Created baseline <n> (<class> @ <edict>:<bits>)`, and those bit counts vary per entity of the same class (seventeen `CFuncBrush` baselines ranging from 91 to 972 bits), so a baseline payload is a property subset, not a fixed dump of every property in the class.
 
 ## Open questions
 
