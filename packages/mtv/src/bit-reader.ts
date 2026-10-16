@@ -80,6 +80,27 @@ export class BitReader {
     }
   }
 
+  /**
+   * Reads a variable length integer: groups of seven bits, least significant
+   * first, each carrying a continuation bit. Not byte aligned, since the
+   * groups are read through the bit stream.
+   */
+  readVarInt32(): number {
+    let value = 0;
+    for (let shift = 0; shift < 35; shift += 7) {
+      const byte = this.readBits(8);
+      value |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) === 0) return value >>> 0;
+    }
+    throw new MtvError('BAD_BODY', `Varint longer than five bytes at bit ${this.bitPos}`);
+  }
+
+  /** Skips `n` bits, with the same bounds checking as a read. */
+  skipBits(n: number): void {
+    this.need(n);
+    this.bitPos += n;
+  }
+
   /** Aligns the position up to the next byte boundary. */
   alignByte(): void {
     this.bitPos = (this.bitPos + 7) & ~7;

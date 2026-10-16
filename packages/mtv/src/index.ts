@@ -53,4 +53,17 @@ export {
   type PlayerState,
   type PlayerTrack,
 } from './player-track.js';
+export {
+  FrameReader,
+  type DecodedProp,
+  type EntityUpdate,
+  type Frame,
+  type FrameReaderOptions,
+} from './frame-reader.js';
+export {
+  readPropValue,
+  resolveClassProps,
+  type PropEncoding,
+  type PropValue,
+} from './prop-encoding.js';
 export { MtvReplay, parseReplay } from './replay.js';

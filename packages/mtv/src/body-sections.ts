@@ -194,26 +194,36 @@ function parseBodyRevision(
     sounds.push({ soundIndex: r.u16('sound index'), path: r.cString(1024, 'sound path') });
   }
 
-  // 4. game event definitions (protobuf)
-  const geSize = r.u32('game event list size');
-  if (geSize > MAX_PROTOBUF_BLOB) {
-    throw new MtvError('LIMIT_EXCEEDED', `Game event list declares ${geSize} bytes`);
-  }
-  const geBlob = r.raw(geSize, 'game event list');
-  const gameEvents = parseGameEventList(geBlob);
-
-  // 5. baselines
-  const baselineSize = r.u32('baseline section size');
-  const baselineEnd = r.pos + baselineSize;
-  if (baselineEnd > body.length) {
-    throw new MtvError('TRUNCATED', 'Baseline section exceeds the body');
-  }
+  // 4 and 5. the game event definitions and the baselines, in the order the
+  // revision puts them: revision 2 swapped the two.
   const knownClassIds = new Set(classes.map((c) => c.classId));
-  const baselines =
-    baselineSize > 0
-      ? indexBaselines(body, r.pos, baselineEnd, header.baselineCount, knownClassIds)
-      : [];
-  r.seek(baselineEnd);
+  const readGameEvents = (): GameEventDef[] => {
+    const size = r.u32('game event list size');
+    if (size > MAX_PROTOBUF_BLOB) {
+      throw new MtvError('LIMIT_EXCEEDED', `Game event list declares ${size} bytes`);
+    }
+    return parseGameEventList(r.raw(size, 'game event list'));
+  };
+  const readBaselines = (): BaselineRecord[] => {
+    const size = r.u32('baseline section size');
+    const end = r.pos + size;
+    if (end > body.length) {
+      throw new MtvError('TRUNCATED', 'Baseline section exceeds the body');
+    }
+    const records =
+      size > 0 ? indexBaselines(body, r.pos, end, header.baselineCount, knownClassIds) : [];
+    r.seek(end);
+    return records;
+  };
+  let gameEvents: GameEventDef[];
+  let baselines: BaselineRecord[];
+  if (revision === 1) {
+    gameEvents = readGameEvents();
+    baselines = readBaselines();
+  } else {
+    baselines = readBaselines();
+    gameEvents = readGameEvents();
+  }
 
   // 6. keyframe index
   const keyframeIndex: KeyframeIndexEntry[] = [];

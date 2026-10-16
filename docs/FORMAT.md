@@ -228,7 +228,8 @@ Replays written by current 0.10.x playtest builds keep formatVersion 2 in the he
 
 - Timeline: `uint16 count`, then compact records `{int32 tick}{uint8 flag}` with two extra bytes `{uint8 track}{uint8 major}` when flag is 2 (checkpoint enter). Flags observed: 3 run start, 0 unknown, 2 checkpoint, 1 final tick. No run-timer double anymore.
 - The player class now has 49 properties (propBits 7 would overflow 6 bits; the header says 6 and frames use 6-bit property indices). New properties include wishVel, moveStatus, acceleration, maxspeed, friction, several EndTick fields, m_flGroundPositionZ, m_iLandTick/m_iJumpTick, m_hActiveWeapon and m_hPrimaryTimer; widths confirmed against the game's own class table dump.
-- The baseline section size is 0: initial entity state lives in the tick 0 keyframe instead.
+- The baselines and the game event definitions swap places: the section after the sound table is the baselines, then the game events. A parser that keeps the revision 1 order reads the baseline bytes as the game event blob and then reads the game event size as the baseline size, which is usually zero, so it sees no baselines at all even though the header counts them. Fixing the order recovers all of them (33 in the agtricks sample, 40 in a deathrun one).
+- A baseline's entity field is a small index, not an edict: it is what a frame's creation records point at, and it carries the class and the initial state of the entity that takes it.
 - Keyframe index: the tick 0 entry is implicit (8 zero bytes, no frame offset), followed by keyFrameCount - 1 full 12 byte entries with the same {tick, keyframeOffset, frameOffset} layout as revision 1.
 - Frames keep the same container ({6-bit block count}{entity blocks}, player first) but each block now writes all property indices first and then the values in that order (classic Source field list), instead of interleaving index and value.
 - Frame data may start with a prologue before the first frame in some gamemodes (observed in defrag and deathrun replays); the frame walker skips it.
@@ -261,6 +262,28 @@ Two further measurements bound how well locating can ever work:
 The keyframe index is what makes any of this checkable: it pins known ticks to known byte offsets, so between two anchors both the tick count and the byte range are exact.
 
 Replays where the player is not the first recorded entity (observed on entity-heavy maps such as a defrag pinball map) cannot be decoded at all until the non-player blocks are mapped.
+
+## Frame and keyframe anatomy [verified against exact frame boundaries]
+
+A keyframe and a frame are the same thing: the engine reads both with one routine, over two bit readers, one per section. One record is:
+
+1. one flag bit, whose meaning is not yet established (zero in every frame seen so far)
+2. one bit saying whether entities start being recorded this tick. When set: a UBitVar count, then the stream aligns to the next byte and each record is three varints, `{baseline index}{slot}{serial}`
+3. a UBitVar count of the entities whose properties follow, then one entry each. An entry is just the slot as a UBitVar; a serial and a class index follow only when the entity is not already in that slot, which is a decision the reader makes from its own state, not something the stream marks
+4. one property payload per entry, in entry order
+5. one optional trailing section: a flag bit and, when set, the stream aligns and a varint length and that many bytes follow, holding a network message (temp entities, sounds, user or entity messages)
+
+A property payload is:
+
+- a UBitVar count of references
+- that many references, each a property index of `propBits` bits, followed by a 6 bit element index when the property is an array
+- the values, in the same order as the references, each read with its property's encoding (an array reference reads one element, not the whole array)
+
+The references are not sorted: a frame lists the properties in the order the recorder noticed them changing.
+
+Entities that only start being recorded this tick contribute nothing beyond their creation record. Their state comes from their baseline, which is why a creation names one.
+
+Worked example, the frame for tick 101 of the agtricks sample, which the keyframe index pins to 156 bytes starting at byte 2812: no creations, one entry for slot 0, eight properties. It decodes to `m_vecOrigin = (-3200, -3519.70, -396.04)`, `m_vecVelocity = (0, 30, -8)`, `wishVel = (0, 300)`, `m_fEffects` and `m_angRotation`. The vertical velocity of -8 is the value the run splits in the header record for that zone transition, from a part of the file that has nothing to do with the body, so the decode is right.
 
 ## Entity slots [verified from the game's own logging]
 
