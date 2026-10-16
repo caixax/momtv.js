@@ -13,6 +13,6 @@ This project is unofficial and is not affiliated with Momentum Mod, Strata Sourc
 
 ## Format knowledge references
 
-The `.mtv` header and splits layout was ported from the TypeScript reader in momentum-mod/website (`libs/formats/replay/`), MIT licensed. The port in this repository is an independent implementation on DataView.
+The `.momtv` header and splits layout was ported from the TypeScript reader in momentum-mod/website (`libs/formats/replay/`), MIT licensed. The port in this repository is an independent implementation on DataView.
 
 Further sections of this file will list any third party code reused in the viewer packages (for example from noclip.website) as it is integrated.

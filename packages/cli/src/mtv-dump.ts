@@ -12,7 +12,7 @@ import {
   type TrackType,
 } from '@caixax/mtv';
 
-const USAGE = `Usage: mtv-dump <file.mtv> [options]
+const USAGE = `Usage: mtv-dump <file.momtv> [options]
 
 Options:
   --summary   header, splits and event summary (default)

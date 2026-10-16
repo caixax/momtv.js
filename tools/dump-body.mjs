@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Annotated dump of a decompressed .mtv body (tools/out/body.bin).
+// Annotated dump of a decompressed .momtv body (tools/out/body.bin).
 // Prints every section with offsets. Regenerate body.bin with:
 //   node tools/dump-fixture.mjs
 import { readFileSync } from 'node:fs';

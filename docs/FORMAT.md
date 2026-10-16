@@ -1,4 +1,4 @@
-# MomentumTV replay format (.mtv)
+# MomentumTV replay format (.momtv)
 
 Reverse engineered specification of the Momentum Mod replay format, version 2, as written by Momentum Mod 0.10.x (Strata Source).
 

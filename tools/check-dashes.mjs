@@ -13,6 +13,7 @@ const BANNED = [
 
 const BINARY_EXTENSIONS = new Set([
   '.mtv',
+  '.momtv',
   '.bsp',
   '.png',
   '.jpg',

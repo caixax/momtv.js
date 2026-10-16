@@ -97,13 +97,13 @@
           <option value="thirdperson">Third person</option>
           <option value="free">Free (WASD + click)</option>
         </select>
-        <span id="status" class="muted">drop a .mtv and its .bsp</span>
+        <span id="status" class="muted">drop a .momtv and its .bsp</span>
       </div>
       <div id="stage">
         <canvas id="canvas"></canvas>
         <div id="drop">
           <div>
-            <h2>Drop a replay (.mtv) and its map (.bsp) here</h2>
+            <h2>Drop a replay (.momtv) and its map (.bsp) here</h2>
             <p class="muted">
               Both files at once or one after the other.<br />
               The official API and CDN do not allow cross origin browser requests, so the map file
@@ -144,8 +144,8 @@
           status.textContent = replayBytes
             ? 'got the replay, drop the .bsp'
             : mapBytes
-              ? 'got the map, drop the .mtv'
-              : 'drop a .mtv and its .bsp';
+              ? 'got the map, drop the .momtv'
+              : 'drop a .momtv and its .bsp';
           return;
         }
         status.textContent = 'loading...';

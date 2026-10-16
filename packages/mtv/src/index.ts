@@ -1,5 +1,5 @@
 /**
- * Parser for Momentum Mod replay files (.mtv, MomentumTV).
+ * Parser for Momentum Mod replay files (.momtv, MomentumTV).
  *
  * Zero dependencies. Works in browsers, workers and Node.
  *

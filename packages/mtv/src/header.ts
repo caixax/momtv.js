@@ -12,7 +12,7 @@ export const SUPPORTED_FORMAT_VERSION = 2;
 export const REPLAY_HEADER_SIZE = 195;
 
 /**
- * The fixed 195 byte header at the start of every .mtv file.
+ * The fixed 195 byte header at the start of every .momtv file.
  *
  * Layout mirrors the C++ struct (pragma pack(1), little endian). The
  * official website reader stops at `runTime` and `style`; the counter fields
@@ -67,7 +67,7 @@ export interface ReplayHeader {
 }
 
 /**
- * Reads the fixed header of a .mtv file.
+ * Reads the fixed header of a .momtv file.
  *
  * Cheap: looks at the first {@link REPLAY_HEADER_SIZE} bytes only, never
  * touches the compressed body. Use it to list replays without full parsing.

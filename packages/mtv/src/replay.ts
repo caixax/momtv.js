@@ -147,7 +147,7 @@ export class MtvReplay {
 }
 
 /**
- * Parses a complete .mtv replay: header, splits, LZMA body and all body
+ * Parses a complete .momtv replay: header, splits, LZMA body and all body
  * sections. The per-tick player track is decoded lazily (see
  * {@link MtvReplay.toTrack}).
  *

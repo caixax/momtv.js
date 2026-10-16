@@ -1,6 +1,6 @@
 {
   "name": "@caixax/mtv-viewer",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "WebGL playback engine for Momentum Mod replays: map resolution, playback clock and renderer",
   "author": "caixax <westlargo@proton.me>",
   "license": "MIT",
@@ -37,5 +37,17 @@
     "webgl",
     "source-engine",
     "bsp"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caixax/mtv.js.git",
+    "directory": "packages/viewer"
+  },
+  "homepage": "https://github.com/caixax/mtv.js/tree/main/packages/viewer#readme",
+  "bugs": {
+    "url": "https://github.com/caixax/mtv.js/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

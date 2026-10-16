@@ -1,7 +1,7 @@
 {
   "name": "@caixax/mtv",
-  "version": "0.0.0",
-  "description": "Parser for Momentum Mod replay files (.mtv, MomentumTV). Zero dependencies, works in browsers, workers and Node.",
+  "version": "0.1.0",
+  "description": "Parser for Momentum Mod replay files (.momtv, MomentumTV). Zero dependencies, works in browsers, workers and Node.",
   "author": "caixax <westlargo@proton.me>",
   "license": "MIT",
   "type": "module",
@@ -35,5 +35,17 @@
     "parser",
     "source-engine",
     "speedrun"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caixax/mtv.js.git",
+    "directory": "packages/mtv"
+  },
+  "homepage": "https://github.com/caixax/mtv.js/tree/main/packages/mtv#readme",
+  "bugs": {
+    "url": "https://github.com/caixax/mtv.js/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }
