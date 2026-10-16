@@ -14,7 +14,7 @@
  */
 import { Button, readHeader, type PlayerState } from '@caixax/mtv';
 import { createViewer, resolveMap, type ViewerOptions, type Viewer } from '@caixax/mtv-viewer';
-import { buildUi, LOADING_STEPS } from './ui.js';
+import { buildUi, LOADING_STEPS, SPEEDS } from './ui.js';
 
 /** Options for {@link createPlayer}. */
 export interface PlayerOptions extends ViewerOptions {
@@ -268,7 +268,22 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   ui.seek.addEventListener('pointerup', endDrag);
   ui.seek.addEventListener('pointercancel', endDrag);
 
-  ui.speedSelect.addEventListener('change', () => viewer.setSpeed(Number(ui.speedSelect.value)));
+  /** Writes a speed to the slider, the readout and the clock. */
+  const applySpeed = (speed: number): void => {
+    // the nearest step, so a speed from the outside still lands on the slider
+    let index = 0;
+    for (let i = 1; i < SPEEDS.length; i++) {
+      if (Math.abs(SPEEDS[i]! - speed) < Math.abs(SPEEDS[index]! - speed)) index = i;
+    }
+    ui.speedRange.value = String(index);
+    const value = SPEEDS[index]!;
+    ui.speedValue.textContent = `${value}x`;
+    viewer.setSpeed(value);
+  };
+  ui.speedRange.addEventListener('input', () =>
+    applySpeed(SPEEDS[Number(ui.speedRange.value)] ?? 1),
+  );
+  ui.speedValue.addEventListener('click', () => applySpeed(1));
   /** The crosshair belongs to the runner's own view, not to the others. */
   const applyCamera = (mode: string): void => {
     viewer.setCamera(mode as 'firstperson');
@@ -321,6 +336,10 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       viewer.seek(Math.max(0, clock.time - (event.shiftKey ? 1 : 5)));
     } else if (event.code === 'ArrowRight') {
       viewer.seek(Math.min(duration, clock.time + (event.shiftKey ? 1 : 5)));
+    } else if (event.code === 'Comma' || event.code === 'Period') {
+      const step = event.code === 'Period' ? 1 : -1;
+      const index = Math.max(0, Math.min(SPEEDS.length - 1, Number(ui.speedRange.value) + step));
+      applySpeed(SPEEDS[index]!);
     } else if (event.code === 'KeyF') {
       ui.fullscreenButton.click();
     } else if (event.code === 'KeyC') {
@@ -442,7 +461,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       endTime = replayFile.header.runTime;
       duration = viewer.clock?.duration ?? 0;
       drawZones();
-      viewer.setSpeed(Number(ui.speedSelect.value));
+      applySpeed(SPEEDS[Number(ui.speedRange.value)] ?? 1);
       applyCamera(ui.cameraSelect.value);
       ui.loading.panel.classList.add('mtvp-gone');
       wake();
@@ -452,10 +471,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
     }
   }
 
-  if (options.speed) {
-    ui.speedSelect.value = String(options.speed);
-    viewer.setSpeed(options.speed);
-  }
+  if (options.speed) applySpeed(options.speed);
   if (options.camera) ui.cameraSelect.value = options.camera;
   if (options.hud === false) {
     ui.settings.hud.checked = false;
@@ -471,10 +487,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
     play: () => viewer.play(),
     pause: () => viewer.pause(),
     seek: (seconds: number) => viewer.seek(seconds),
-    setSpeed: (speed: number) => {
-      ui.speedSelect.value = String(speed);
-      viewer.setSpeed(speed);
-    },
+    setSpeed: (speed: number) => applySpeed(speed),
     destroy() {
       if (destroyed) return;
       destroyed = true;

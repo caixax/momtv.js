@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { formatTime } from '../src/index.js';
-import { buildUi, LOADING_STEPS } from '../src/ui.js';
+import { buildUi, LOADING_STEPS, SPEEDS } from '../src/ui.js';
 
 describe('formatTime', () => {
   it('writes a run time the way a run time is written', () => {
@@ -68,17 +68,19 @@ describe('buildUi', () => {
     expect(ui.hud.keys.get('jump')!.textContent).toBe('SPACE');
   });
 
-  it('offers the speeds and the cameras', () => {
+  it('runs the speed from very slow to fast, starting at normal', () => {
     const ui = buildUi(container);
-    expect(Array.from(ui.speedSelect.options, (o) => o.value)).toEqual([
-      '0.1',
-      '0.25',
-      '0.5',
-      '1',
-      '2',
-      '4',
-    ]);
-    expect(ui.speedSelect.value).toBe('1');
+    expect(SPEEDS[0]).toBe(0.05);
+    expect(SPEEDS.at(-1)).toBe(4);
+    expect(SPEEDS).toContain(1);
+    expect(ui.speedRange.min).toBe('0');
+    expect(ui.speedRange.max).toBe(String(SPEEDS.length - 1));
+    expect(SPEEDS[Number(ui.speedRange.value)]).toBe(1);
+    expect(ui.speedValue.textContent).toBe('1x');
+  });
+
+  it('offers the cameras', () => {
+    const ui = buildUi(container);
     expect(Array.from(ui.cameraSelect.options, (o) => o.value)).toEqual([
       'firstperson',
       'thirdperson',

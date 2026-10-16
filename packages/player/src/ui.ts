@@ -46,7 +46,8 @@ export interface PlayerUi {
   seekHead: HTMLElement;
   seekZones: HTMLElement;
   time: HTMLElement;
-  speedSelect: HTMLSelectElement;
+  speedRange: HTMLInputElement;
+  speedValue: HTMLElement;
   cameraSelect: HTMLSelectElement;
   settingsButton: HTMLButtonElement;
   fullscreenButton: HTMLButtonElement;
@@ -59,6 +60,9 @@ export interface PlayerUi {
     loop: HTMLInputElement;
   };
 }
+
+/** The speeds the slider steps through, slowest first. */
+export const SPEEDS = [0.05, 0.1, 0.15, 0.25, 0.35, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 /** The stages the loading screen shows, in order. */
 export const LOADING_STEPS = ['replay', 'map', 'materials', 'props', 'sky'] as const;
@@ -137,14 +141,19 @@ export function buildUi(container: HTMLElement): PlayerUi {
   playButton.title = 'Play or pause (space)';
   const time = el('div', 'mtvp-time', '0:00.000 / 0:00.000');
   const grow = el('div', 'mtvp-grow');
-  const speedSelect = el('select', 'mtvp-select');
-  for (const value of [0.1, 0.25, 0.5, 1, 2, 4]) {
-    const option = el('option', undefined, `${value}x`);
-    option.value = String(value);
-    speedSelect.append(option);
-  }
-  speedSelect.value = '1';
-  speedSelect.title = 'Playback speed';
+  // Playback speed: a slider over the steps below, so the slow end has as
+  // much room as the fast one.
+  const speedBox = el('div', 'mtvp-speedbox');
+  const speedRange = el('input');
+  speedRange.type = 'range';
+  speedRange.min = '0';
+  speedRange.max = String(SPEEDS.length - 1);
+  speedRange.step = '1';
+  speedRange.value = String(SPEEDS.indexOf(1));
+  speedRange.title = 'Playback speed';
+  const speedValue = el('div', 'mtvp-speedvalue', '1x');
+  speedValue.title = 'Back to normal speed';
+  speedBox.append(speedRange, speedValue);
   const cameraSelect = el('select', 'mtvp-select');
   for (const [value, label] of [
     ['firstperson', 'First person'],
@@ -161,7 +170,7 @@ export function buildUi(container: HTMLElement): PlayerUi {
   settingsButton.title = 'Settings';
   const fullscreenButton = el('button', 'mtvp-btn mtvp-icon', '⛶');
   fullscreenButton.title = 'Fullscreen (f)';
-  row.append(playButton, time, grow, speedSelect, cameraSelect, settingsButton, fullscreenButton);
+  row.append(playButton, time, grow, speedBox, cameraSelect, settingsButton, fullscreenButton);
   bar.append(seek, row);
   root.append(bar);
 
@@ -231,7 +240,8 @@ export function buildUi(container: HTMLElement): PlayerUi {
     seekHead,
     seekZones,
     time,
-    speedSelect,
+    speedRange,
+    speedValue,
     cameraSelect,
     settingsButton,
     fullscreenButton,

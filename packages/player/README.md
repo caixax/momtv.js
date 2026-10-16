@@ -34,9 +34,9 @@ In a plain page, the bundle puts `MTV` on the window:
 - A loading screen that follows the replay, the map download, the materials, the props and the sky.
 - The run timer, counted from the tick the run starts on and frozen at the recorded time, with the last zone passed underneath.
 - Speed in units per second, the tick, whether the runner is on the ground, and the keys being pressed.
-- A bar with play, a seek line marked at every zone, the time, the speed multiplier, the camera and a settings flyout (field of view, run readout, props, sky, loop).
+- A bar with play, a seek line marked at every zone, the time, a speed slider from a twentieth of normal to four times it, the camera and a settings flyout (field of view, run readout, props, sky, loop).
 
-Keys: space plays and pauses, the arrows seek (hold shift for one second steps), `f` is fullscreen, `c` changes camera. In the free camera, `WASD` fly and space rises.
+Keys: space plays and pauses, the arrows seek (hold shift for one second steps), `,` and `.` step the speed down and up, `f` is fullscreen, `c` changes camera. Clicking the speed readout puts it back to normal. In the free camera, `WASD` fly and space rises.
 
 ## Options
 

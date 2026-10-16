@@ -190,6 +190,19 @@ export const CSS = `
   cursor: pointer;
 }
 .mtvp-select:hover { background: rgba(255, 255, 255, .18); }
+.mtvp-speedbox { display: flex; align-items: center; gap: 7px; }
+.mtvp-speedbox input[type=range] {
+  width: 104px;
+  accent-color: var(--mtvp-accent);
+  cursor: pointer;
+}
+.mtvp-speedvalue {
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: right;
+  opacity: .85;
+  cursor: pointer;
+}
 
 /* the settings flyout */
 .mtvp-menu {
