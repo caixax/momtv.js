@@ -235,6 +235,37 @@ Oracle note: on maps with push physics (boosters, bumpers, conveyors) the record
 
 ## Frame location and its limits [verified by measurement]
 
+Only the leading player block of a frame is decoded; the trailing entity blocks (viewmodel, weapons, zones, map entities) are not mapped, so a frame's true end is unknown and the next frame has to be located rather than computed.
+
+What makes locating one reliable: a frame that carries neither the position nor a velocity component is almost always a run of bits inside another entity's block. Requiring one of those properties raises the share of ticks that receive real movement data from 88 to 98 percent across the sample replays, and cuts the ticks where the player freezes while moving by four to twenty times.
+
+Current quality, measured as the share of moving ticks whose position does not advance (what a viewer shows as a stutter):
+
+| Replay                 | Frozen ticks |
+| ---------------------- | ------------ |
+| ab_baume               | 0.2%         |
+| df_cruton              | 0.1%         |
+| bhop_badwater          | 1.0%         |
+| bhop_eazy (revision 1) | 0.7%         |
+| agtricks               | 2.6%         |
+
+The remaining stutter is concentrated, not spread out: on agtricks all but five of the frozen ticks fall in four runs, and each run begins on a timeline zone event. The frame that follows such an event updates many entities at once and does not start with the player block (an entity count of 14 instead of the usual 4), so the walker loses the thread until the next keyframe anchor. Candidate scoring by motion continuity was measured and does not help; what closes this is decoding the non-player blocks, which needs the entity to class mapping and the per class property encodings.
+
+## Body revision 2 (current playtest builds) [verified]
+
+Replays written by current 0.10.x playtest builds keep formatVersion 2 in the header but revise the body layout. A parser distinguishes the revisions structurally (revision 1 parses to the exact body end or it is revision 2). Differences:
+
+- Timeline: `uint16 count`, then compact records `{int32 tick}{uint8 flag}` with two extra bytes `{uint8 track}{uint8 major}` when flag is 2 (checkpoint enter). Flags observed: 3 run start, 0 unknown, 2 checkpoint, 1 final tick. No run-timer double anymore.
+- The player class now has 49 properties (propBits 7 would overflow 6 bits; the header says 6 and frames use 6-bit property indices). New properties include wishVel, moveStatus, acceleration, maxspeed, friction, several EndTick fields, m_flGroundPositionZ, m_iLandTick/m_iJumpTick, m_hActiveWeapon and m_hPrimaryTimer; widths confirmed against the game's own class table dump.
+- The baseline section size is 0: initial entity state lives in the tick 0 keyframe instead.
+- Keyframe index: the tick 0 entry is implicit (8 zero bytes, no frame offset), followed by keyFrameCount - 1 full 12 byte entries with the same {tick, keyframeOffset, frameOffset} layout as revision 1.
+- Frames keep the same container ({6-bit block count}{entity blocks}, player first) but each block now writes all property indices first and then the values in that order (classic Source field list), instead of interleaving index and value.
+- Frame data may start with a prologue before the first frame in some gamemodes (observed in defrag and deathrun replays); the frame walker skips it.
+
+Oracle note: on maps with push physics (boosters, bumpers, conveyors) the recorded m_vecVelocity legitimately disagrees with per-tick position deltas while the push is acting, since base velocity is not part of the recorded property set. Plain bhop runs validate at over 99%.
+
+## Frame location and its limits [verified by measurement]
+
 Only the leading player block of a frame is decoded; the trailing entity blocks (viewmodel, weapons, zones, map entities) are not mapped, so a frame's true end is unknown and the next frame has to be located rather than computed. Two measurements bound how well that can work:
 
 - Candidate density: in the first 4000 bytes of bhop_badwater there are 203 byte offsets that parse as a valid player block, for about 100 real frames. Roughly half of the candidates are frame-shaped runs of bits inside the trailing blocks.
