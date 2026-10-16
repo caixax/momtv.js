@@ -169,7 +169,11 @@ function readVvd(vvd: Uint8Array): { checksum: number; vertices: Uint8Array; cou
   if (fixupCount === 0) {
     const bytes = lodVertexCount * VERTEX_SIZE;
     if (dataStart + bytes > vvd.length) throw new Error('vertex data is truncated');
-    return { checksum, vertices: vvd.subarray(dataStart, dataStart + bytes), count: lodVertexCount };
+    return {
+      checksum,
+      vertices: vvd.subarray(dataStart, dataStart + bytes),
+      count: lodVertexCount,
+    };
   }
   // With fixups the vertices are stored out of order, as runs to be copied.
   const out = new Uint8Array(lodVertexCount * VERTEX_SIZE);
@@ -198,7 +202,10 @@ type MeshIndices = number[][];
  *
  * @returns for each body part, for each model, for each mesh, the indices
  */
-function readVtx(vtx: Uint8Array, mdlVersion: number): { checksum: number; parts: MeshIndices[][] } {
+function readVtx(
+  vtx: Uint8Array,
+  mdlVersion: number,
+): { checksum: number; parts: MeshIndices[][] } {
   const view = new DataView(vtx.buffer, vtx.byteOffset, vtx.byteLength);
   if (vtx.length < 36) throw new Error('triangle data is too small');
   const checksum = view.getInt32(VTX.checksum, true);

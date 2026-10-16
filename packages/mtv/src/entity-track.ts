@@ -136,7 +136,8 @@ const WANTED = new Set([
 ]);
 
 /** The player has its own track, and its weapons do not exist in the map. */
-const IGNORED = /^CMomentum(Player|ViewModel|Pistol|Knife|Rifle|Shotgun|Machinegun|Sniper|Grenade|Concgrenade|Paintgun|Rocket|Stickybomb|Knife)/;
+const IGNORED =
+  /^CMomentum(Player|ViewModel|Pistol|Knife|Rifle|Shotgun|Machinegun|Sniper|Grenade|Concgrenade|Paintgun|Rocket|Stickybomb|Knife)/;
 
 /** The outcome of a walk: one track per recorded entity that ever moved. */
 export interface EntityTracks {

@@ -152,5 +152,7 @@ export function applyPatch(patch: Vmt, included: Vmt): Vmt {
 
 /** A material name that is a tool brush, which the game never draws. */
 export function isToolMaterial(name: string): boolean {
-  return /^tools\//i.test(name) || /(^|\/)toolstrigger|toolsnodraw|toolsclip|toolsskybox/i.test(name);
+  return (
+    /^tools\//i.test(name) || /(^|\/)toolstrigger|toolsnodraw|toolsclip|toolsskybox/i.test(name)
+  );
 }

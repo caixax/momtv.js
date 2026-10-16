@@ -6,12 +6,12 @@ What hlviewer.js is for GoldSrc, this is for Momentum Mod. Unofficial, and not a
 
 ## Packages
 
-| Package | What it is |
-| --- | --- |
-| [`@caixax/mtv`](packages/mtv) | The replay reader. Zero dependencies; browsers, workers and Node. |
+| Package                                 | What it is                                                              |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| [`@caixax/mtv`](packages/mtv)           | The replay reader. Zero dependencies; browsers, workers and Node.       |
 | [`@caixax/mtv-viewer`](packages/viewer) | The playback engine: map resolution, the WebGL2 renderer and the clock. |
-| [`@caixax/mtv-player`](packages/player) | The drop-in player: loading screen, controls and the run readout. |
-| [`@caixax/mtv-cli`](packages/cli) | Command line tools. |
+| [`@caixax/mtv-player`](packages/player) | The drop-in player: loading screen, controls and the run readout.       |
+| [`@caixax/mtv-cli`](packages/cli)       | Command line tools.                                                     |
 
 ## Play a replay
 

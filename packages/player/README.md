@@ -42,16 +42,16 @@ Keys: space plays and pauses, the arrows seek (hold shift for one second steps),
 
 Everything [`createViewer`](../viewer) takes, plus:
 
-| Option | What it does |
-| --- | --- |
-| `replay` | URL or bytes to load straight away |
-| `map` | the map bytes, when the caller already has them |
-| `autoplay` | start playing when ready (default true) |
-| `loop` | start again at the end |
-| `speed` | playback speed to start at |
-| `camera` | `firstperson`, `thirdperson` or `free` |
-| `hud` | show the run readout (default true) |
-| `onError` | called when loading fails |
+| Option     | What it does                                    |
+| ---------- | ----------------------------------------------- |
+| `replay`   | URL or bytes to load straight away              |
+| `map`      | the map bytes, when the caller already has them |
+| `autoplay` | start playing when ready (default true)         |
+| `loop`     | start again at the end                          |
+| `speed`    | playback speed to start at                      |
+| `camera`   | `firstperson`, `thirdperson` or `free`          |
+| `hud`      | show the run readout (default true)             |
+| `onError`  | called when loading fails                       |
 
 ## Licence
 

@@ -235,9 +235,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
         materialOptions.onProgress = (done, total) =>
           options.onLoadStatus?.('materials', done, total);
       }
-      const materials = options.noTextures
-        ? undefined
-        : await loadMaterials(map, materialOptions);
+      const materials = options.noTextures ? undefined : await loadMaterials(map, materialOptions);
       renderer.upload(map, materials);
       if (!options.noSky && !options.noTextures) {
         options.onLoadStatus?.('sky', 0, 1);

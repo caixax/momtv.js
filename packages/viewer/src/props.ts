@@ -71,7 +71,10 @@ async function resolveModelMaterial(
   const paths = model.searchPaths.length > 0 ? model.searchPaths : [''];
   let first: LoadedMaterial | undefined;
   for (const raw of paths) {
-    const directory = raw.replace(/\\/g, '/').toLowerCase().replace(/^\/+|\/+$/g, '');
+    const directory = raw
+      .replace(/\\/g, '/')
+      .toLowerCase()
+      .replace(/^\/+|\/+$/g, '');
     const full = directory ? `${directory}/${name}` : name;
     const material = await resolver.resolve(full);
     if (material.texture) return material;

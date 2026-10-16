@@ -8,7 +8,12 @@ function buildGameLump(options: {
   leafCount: number;
   leafSize: 2 | 4;
   stride: number;
-  props: { model: number; origin: [number, number, number]; angles: [number, number, number]; scale?: [number, number, number] }[];
+  props: {
+    model: number;
+    origin: [number, number, number];
+    angles: [number, number, number];
+    scale?: [number, number, number];
+  }[];
 }): { gameLump: Uint8Array; file: Uint8Array } {
   const { version, models, leafCount, leafSize, stride, props } = options;
   const bodySize = 4 + models.length * 128 + 4 + leafCount * leafSize + 4 + props.length * stride;

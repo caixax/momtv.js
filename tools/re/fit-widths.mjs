@@ -255,7 +255,8 @@ for (const { path, replay } of replays) {
   console.log(`${path.split('/').pop()}`);
   console.log(
     `  ${best.frames}/${replay.frameCount} frames, ${best.hit} anchors hit, ` +
-      `${best.missed} missed` + (best.failure ? ` | ${best.failure}` : ' | clean'),
+      `${best.missed} missed` +
+      (best.failure ? ` | ${best.failure}` : ' | clean'),
   );
   console.log('  corrections: ' + ([...extra].map(([n, b]) => `${n} +${b}`).join(', ') || 'none'));
 }

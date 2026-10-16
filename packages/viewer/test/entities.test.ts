@@ -72,7 +72,10 @@ describe('linkBrushEntities', () => {
       model('func_water', [1, 0, 0]),
       model('func_door_rotating', [2, 0, 0]),
     ]);
-    const linked = linkBrushEntities(map, [entityTrack('CBaseDoor', 0), entityTrack('CBaseDoor', 1)]);
+    const linked = linkBrushEntities(map, [
+      entityTrack('CBaseDoor', 0),
+      entityTrack('CBaseDoor', 1),
+    ]);
     expect(linked.map((l) => l.model)).toEqual([1, 2]);
   });
 
@@ -98,9 +101,7 @@ describe('linkBrushEntities', () => {
 
 describe('mat4FromAngles', () => {
   const apply = (m: Float32Array, v: [number, number, number]): number[] =>
-    [0, 1, 2].map(
-      (i) => m[i]! * v[0] + m[4 + i]! * v[1] + m[8 + i]! * v[2] + m[12 + i]!,
-    );
+    [0, 1, 2].map((i) => m[i]! * v[0] + m[4 + i]! * v[1] + m[8 + i]! * v[2] + m[12 + i]!);
 
   it('moves a point by the origin when there is no turn', () => {
     const m = mat4FromAngles([0, 0, 0], [5, 6, 7]);

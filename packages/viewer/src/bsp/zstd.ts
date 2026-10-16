@@ -40,12 +40,12 @@ const MAX_MATCH_LENGTH_SYMBOL = 52;
 const MAX_OFFSET_SYMBOL = 31;
 
 const LITERALS_LENGTH_BASE = [
-  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 40, 48, 64,
-  128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24, 28, 32, 40, 48, 64, 128,
+  256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
 ];
 const LITERALS_LENGTH_BITS = [
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 6, 7, 8, 9, 10, 11,
-  12, 13, 14, 15, 16,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 6, 7, 8, 9, 10, 11, 12,
+  13, 14, 15, 16,
 ];
 const MATCH_LENGTH_BASE = [
   3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
@@ -53,8 +53,8 @@ const MATCH_LENGTH_BASE = [
   4099, 8195, 16387, 32771, 65539,
 ];
 const MATCH_LENGTH_BITS = [
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+  1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ];
 
 /** Distributions the format fixes, used when a table is not sent. */
@@ -63,8 +63,8 @@ const PREDEFINED_LITERALS_LENGTH = [
   -1, -1, -1, -1,
 ];
 const PREDEFINED_MATCH_LENGTH = [
-  1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1,
+  1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1,
 ];
 const PREDEFINED_OFFSET = [
   1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1,
@@ -456,10 +456,7 @@ interface FrameState {
 }
 
 /** Decodes the literals section. Returns the literals and the bytes used. */
-function readLiterals(
-  src: Uint8Array,
-  state: FrameState,
-): { literals: Uint8Array; used: number } {
+function readLiterals(src: Uint8Array, state: FrameState): { literals: Uint8Array; used: number } {
   const first = src[0];
   if (first === undefined) throw new Error('zstd block has no literals section');
   const type = first & 3;

@@ -103,9 +103,7 @@ export class SkyRenderer {
       corners.forEach(([s, t], i) => {
         for (let axis = 0; axis < 3; axis++) {
           positions[i * 3 + axis] =
-            (face.normal[axis]! +
-              face.right[axis]! * (2 * s - 1) +
-              face.up[axis]! * (1 - 2 * t)) *
+            (face.normal[axis]! + face.right[axis]! * (2 * s - 1) + face.up[axis]! * (1 - 2 * t)) *
             RADIUS;
         }
       });

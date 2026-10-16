@@ -26,8 +26,7 @@ const LUMP = {
  */
 function buildMap(wide: boolean, displacement?: number): Uint8Array {
   const lumps = new Map<number, { data: Uint8Array; version: number }>();
-  const put = (index: number, data: Uint8Array, version = 0) =>
-    lumps.set(index, { data, version });
+  const put = (index: number, data: Uint8Array, version = 0) => lumps.set(index, { data, version });
 
   const bytes = (length: number) => {
     const data = new Uint8Array(length);
@@ -173,9 +172,7 @@ describe('parseBsp across BSP versions', () => {
       expect(map.version).toBe(wide ? 25 : 20);
       expect(map.mapRevision).toBe(1);
       expect(map.skyName).toBe('sky_x');
-      expect(map.materials).toEqual([
-        { name: 'brick/wall001', reflectivity: [0.5, 0.25, 0.125] },
-      ]);
+      expect(map.materials).toEqual([{ name: 'brick/wall001', reflectivity: [0.5, 0.25, 0.125] }]);
       // the square comes out as two triangles of the one material
       expect(map.world).toHaveLength(1);
       const group = map.world[0]!;

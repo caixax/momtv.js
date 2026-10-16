@@ -41,7 +41,10 @@ export interface Player {
   /** The viewer underneath, for anything the chrome does not cover. */
   readonly viewer: Viewer;
   /** Loads another replay into the same player. */
-  load(replay: string | ArrayBuffer | Uint8Array, map?: string | ArrayBuffer | Uint8Array): Promise<void>;
+  load(
+    replay: string | ArrayBuffer | Uint8Array,
+    map?: string | ArrayBuffer | Uint8Array,
+  ): Promise<void>;
   play(): void;
   pause(): void;
   /** Seeks to a time in seconds. */
@@ -78,7 +81,8 @@ const IDLE_DELAY = 2600;
  */
 export function createPlayer(container: HTMLElement, options: PlayerOptions = {}): Player {
   const ui = buildUi(container);
-  const baseFetch = options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
+  const baseFetch =
+    options.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
   // What the loading screen is waiting for, and how far along it is.
   const progress = new Map<string, number>();
@@ -120,7 +124,9 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       setStep(
         step,
         total > 0 ? read / total : 0.5,
-        total > 0 ? `${label} ${formatSize(read)} of ${formatSize(total)}` : `${label} ${formatSize(read)}`,
+        total > 0
+          ? `${label} ${formatSize(read)} of ${formatSize(total)}`
+          : `${label} ${formatSize(read)}`,
       );
     }
     const out = new Uint8Array(read);

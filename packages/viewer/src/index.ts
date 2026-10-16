@@ -54,12 +54,7 @@ export { createViewer, type LoadInput, type Viewer, type ViewerOptions } from '.
 export { linkBrushEntities, type LinkedEntity } from './entities.js';
 export { readStaticProps, type StaticProp, type StaticProps } from './bsp/static-props.js';
 export { parseStudioModel, type StudioMesh, type StudioModel } from './mdl/studio.js';
-export {
-  loadStaticProps,
-  type LoadPropsOptions,
-  type PropMesh,
-  type PropModel,
-} from './props.js';
+export { loadStaticProps, type LoadPropsOptions, type PropMesh, type PropModel } from './props.js';
 export { PropRenderer } from './gl/prop-renderer.js';
 export { SkyRenderer } from './gl/sky-renderer.js';
 export { loadSky, SKY_SIDES, type Sky, type SkyFace } from './sky.js';

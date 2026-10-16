@@ -274,7 +274,7 @@ export class MapRenderer {
    */
   setModelTransform(model: number, transform: Mat4 | null): void {
     if (model < 0 || model >= this.transforms.length) return;
-    this.transforms[model] = transform ?? (this.placements[model] ?? mat4Identity());
+    this.transforms[model] = transform ?? this.placements[model] ?? mat4Identity();
   }
 
   /** Renders one frame. */

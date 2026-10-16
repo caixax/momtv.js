@@ -51,7 +51,9 @@ describe('buildUi', () => {
     expect(ui.hud.crosshair.parentElement?.className).toBe('mtvp-hud-middle');
     // the crosshair comes first, so the speed reads under it
     expect(ui.hud.crosshair.nextElementSibling).toBe(ui.hud.speed);
-    expect(ui.hud.keys.get('jump')?.parentElement?.parentElement?.className).toBe('mtvp-hud-bottom');
+    expect(ui.hud.keys.get('jump')?.parentElement?.parentElement?.className).toBe(
+      'mtvp-hud-bottom',
+    );
   });
 
   it('shows the speed as a number on its own', () => {

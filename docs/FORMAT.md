@@ -361,10 +361,10 @@ Strata Source's 7.6 adds the resource `AXC`, an auxiliary compression table: a s
 
 Momentum's maps are VBSP 19 to 25. Version 25, which Strata Source writes, widens two of the structures the renderer reads and announces each change in that lump's version field:
 
-| Lump | Older | Strata |
-| --- | --- | --- |
+| Lump  | Older                                                             | Strata                                                                                           |
+| ----- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | FACES | version 1, 56 bytes, 16 bit plane, numedges, texinfo and dispinfo | version 2, 72 bytes, all four widened to 32 bits, two bytes of padding after `side` and `onNode` |
-| EDGES | version 0, two 16 bit vertex indices | version 1, two 32 bit ones |
+| EDGES | version 0, two 16 bit vertex indices                              | version 1, two 32 bit ones                                                                       |
 
 The lump sizes confirm it: in `df_cruton` the faces lump holds 1004472 bytes, which is 13951 faces of 72 bytes, and every face's plane, edge, texinfo, lightmap and original face field lands in range with that layout. TEXINFO, TEXDATA, PLANES, MODELS, VERTEXES and SURFEDGES are unchanged.
 

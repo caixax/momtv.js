@@ -453,11 +453,7 @@ export function parseVtf(data: Uint8Array): DecodedTexture {
   if (compression) {
     // Every chunk is stored compressed and the table gives their sizes, in the
     // same order as the data: smallest mip level first.
-    const table = new DataView(
-      compression.buffer,
-      compression.byteOffset,
-      compression.byteLength,
-    );
+    const table = new DataView(compression.buffer, compression.byteOffset, compression.byteLength);
     const entries = (compression.byteLength - 4) / 4;
     if (entries < mips * chunksPerMip) {
       throw new Error(`VTF compression table holds ${entries} of ${mips * chunksPerMip} chunks`);

@@ -142,16 +142,18 @@ describe('parseStudioModel', () => {
   });
 
   it('refuses files that belong to different models', () => {
-    expect(() => parseStudioModel(...Object.values(buildModel({ vvdChecksum: 1 })) as [Uint8Array, Uint8Array, Uint8Array])).toThrow(
-      /vertices belong to a different model/,
-    );
+    expect(() =>
+      parseStudioModel(
+        ...(Object.values(buildModel({ vvdChecksum: 1 })) as [Uint8Array, Uint8Array, Uint8Array]),
+      ),
+    ).toThrow(/vertices belong to a different model/);
     const { mdl, vvd, vtx } = buildModel({ vtxChecksum: 2 });
     expect(() => parseStudioModel(mdl, vvd, vtx)).toThrow(/triangles belong to a different model/);
   });
 
   it('refuses something that is not a model at all', () => {
-    expect(() => parseStudioModel(new Uint8Array(300), new Uint8Array(64), new Uint8Array(64))).toThrow(
-      /not a studio model/,
-    );
+    expect(() =>
+      parseStudioModel(new Uint8Array(300), new Uint8Array(64), new Uint8Array(64)),
+    ).toThrow(/not a studio model/);
   });
 });
