@@ -325,6 +325,8 @@ Reading the frames rather than searching for them, with the keyframe index used 
 
 For comparison, searching for the frames left between 0.1 and 2.6 percent of moving ticks standing still, and could not decode the pinball replay at all.
 
+What the remaining losses have in common: the frame carries the run timer's payload, where `m_dNetworkRunTime` (a 64 bit integer) and `m_limitedRunSplitsB64` (a string whose contents are not the base64 its name suggests) do not add up. Those properties are only sent when the timer changes state, which happens on a zone event, and a zone event is where the keyframe index pins the next frame, so a loss is corrected within a tick or two and never spreads.
+
 ## Open questions
 
 - Baseline `tick` field semantics (275 vs -2468 in the sample).

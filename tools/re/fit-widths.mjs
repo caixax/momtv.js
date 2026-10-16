@@ -80,8 +80,9 @@ function walk(replay, extra) {
   const baselineClass = new Map(body.baselines.map((b) => [b.entity, names.get(b.classId)]));
   const encodings = new Map(body.classes.map((c) => [c.name, resolveClassProps(c.name, c.props)]));
   const propNames = new Map(body.classes.map((c) => [c.name, c.props]));
+  // A keyframe at tick T records where the frame for T + 1 starts.
   const anchors = new Map(
-    body.keyframeIndex.filter((k) => k.frameOffset >= 0).map((k) => [k.tick, k.frameOffset]),
+    body.keyframeIndex.filter((k) => k.frameOffset >= 0).map((k) => [k.tick + 1, k.frameOffset]),
   );
 
   const slots = new Map();
@@ -111,6 +112,7 @@ function walk(replay, extra) {
 
   let frames = 0;
   let hit = 0;
+  let missed = 0;
   let failure = null;
   let recent = [];
   try {
@@ -118,7 +120,12 @@ function walk(replay, extra) {
       const anchor = anchors.get(frames);
       if (anchor !== undefined) {
         if (rel() === anchor * 8) hit++;
-        else throw new Error(`anchor for tick ${frames} off by ${rel() / 8 - anchor} bytes`);
+        else {
+          // The index is authoritative, so carry on from there and count the
+          // frame as one this reading could not place.
+          r.bitPos = section.offset * 8 + anchor * 8;
+          missed++;
+        }
       }
       const carried = [];
       r.readBit();
@@ -184,7 +191,16 @@ function walk(replay, extra) {
   } catch (error) {
     failure = error.message;
   }
-  return { frames, hit, failure, candidates: [...new Set(recent.flat())] };
+  // What to maximise: frames read in place, less the resynchronisations the
+  // reading needed.
+  return {
+    frames,
+    hit,
+    missed,
+    score: frames - missed * 50,
+    failure,
+    candidates: [...new Set(recent.flat())],
+  };
 }
 
 const files = process.argv.slice(2);
@@ -230,19 +246,16 @@ function fit(replay, seed) {
   return { extra, best };
 }
 
-const SEED = [
-  ['m_iLandTick', 1],
-  ['m_iJumpTick', 1],
-  ['m_iEarlyJumpTiming', 1],
-  ['m_dNetworkRunTime', 1],
-];
+// The corrections already established live in the generated property table,
+// so the climb starts from nothing.
+const SEED = [];
 
 for (const { path, replay } of replays) {
   const { extra, best } = fit(replay, SEED);
   console.log(`${path.split('/').pop()}`);
   console.log(
-    `  ${best.frames}/${replay.frameCount} frames, ${best.hit} anchors` +
-      (best.failure ? ` | ${best.failure}` : ' | clean'),
+    `  ${best.frames}/${replay.frameCount} frames, ${best.hit} anchors hit, ` +
+      `${best.missed} missed` + (best.failure ? ` | ${best.failure}` : ' | clean'),
   );
   console.log('  corrections: ' + ([...extra].map(([n, b]) => `${n} +${b}`).join(', ') || 'none'));
 }
