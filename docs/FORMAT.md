@@ -139,7 +139,9 @@ Property order in this table defines the property index used in all bit-packed e
 
 The layout was recovered from the engine's record reader (a 32 bit field, a varint, a UBitVar and a 16 bit length whose `(bits + 7) / 8` becomes the byte size) and confirmed on the sample: all 198 records chain byte for byte, with contiguous entity ordinals and class ids that all appear in the class table.
 
-The payload is a 10 bit record header followed by every property of the class in ascending index order, each as `{propBits index}{value}`. For the player this consumes the declared 931 bits exactly, with no padding left over, decoding all 26 properties. `m_hViewModel` (an array property) occupies 55 bits there.
+The payload is `{UBitVar propertyCount}{property}*`, where each property is `{propBits index}{value}` in ascending index order. The count is a UBitVar, so it takes 6 bits for a class with fewer than 16 properties and 10 for the player's 26, which is why the player's properties start 10 bits in and a brush's start 6 bits in.
+
+Checked against the sample: CFuncBrush's 11 properties consume its declared 240 bits exactly, with nothing left over, using only widths taken from the game's network tables. The same arithmetic gives `m_hViewModel` (an array property) 55 bits in a player baseline. The weapon classes come out one bit apart from each other, which is expected: that sample was recorded by an older build, where the class was still named CKnife and its properties were not identical to today's.
 
 ### 6. Keyframe index [verified]
 
