@@ -12,7 +12,7 @@
  * });
  * ```
  */
-import { Button, type PlayerState } from '@caixax/mtv';
+import { Button, readHeader, type PlayerState } from '@caixax/mtv';
 import { createViewer, resolveMap, type ViewerOptions, type Viewer } from '@caixax/mtv-viewer';
 import { buildUi, LOADING_STEPS } from './ui.js';
 
@@ -374,7 +374,6 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       } else {
         // The map is resolved here rather than inside the viewer, so the
         // download it needs can be shown as it arrives.
-        const { readHeader } = await import('@caixax/mtv');
         const header = readHeader(replayBytes);
         ui.loading.title.textContent = `Loading ${header.mapName}`;
         setStep('map', 0, 'looking up the map');
