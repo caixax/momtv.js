@@ -27,8 +27,12 @@ export interface LoadMaterialsOptions {
    * Base URL for loose game files, looked up as `{assetsBaseUrl}/materials/x.vtf`.
    * Serve the game's own directory here and the viewer finds the materials a
    * map does not pack.
+   *
+   * A game has more than one content root (Momentum keeps engine materials
+   * under `platform` and its own under `momentum`), so several may be given,
+   * and they are searched in order.
    */
-  assetsBaseUrl?: string;
+  assetsBaseUrl?: string | readonly string[];
   /**
    * URLs of `_dir.vpk` files to read materials from, in order of preference.
    * Each is read with range requests, so pointing at a multi gigabyte archive
@@ -67,7 +71,9 @@ export async function loadMaterials(
       const source = await openVpk(url, fetchImpl).catch(() => undefined);
       if (source) sources.push(source);
     }
-    if (options.assetsBaseUrl) sources.push(looseSource(options.assetsBaseUrl, fetchImpl));
+    const roots =
+      typeof options.assetsBaseUrl === 'string' ? [options.assetsBaseUrl] : options.assetsBaseUrl;
+    for (const root of roots ?? []) sources.push(looseSource(root, fetchImpl));
   }
   const assets = firstOf(sources);
 
