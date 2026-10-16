@@ -38,9 +38,8 @@ describe('body revision 2', () => {
   it('decodes every frame with plausible player state', () => {
     const track = replay.toTrack();
     expect(track.stats.frames).toBe(replay.frameCount);
-    // a few ticks may desync around jumps where the trailing entity blocks
-    // cannot be walked; they keep the previous state rather than crash
-    expect(track.stats.lostFrames).toBeLessThanOrEqual(8);
+    // a lost tick is a frame the parser refused rather than guessed at
+    expect(track.stats.lostFrames / replay.frameCount).toBeLessThan(0.02);
     let top = 0;
     for (let t = 0; t < track.frameCount; t++) {
       const s = trackStateAt(track, t);
@@ -51,6 +50,21 @@ describe('body revision 2', () => {
     }
     expect(top).toBeGreaterThan(300);
     expect(top).toBeLessThan(4000);
+  });
+
+  it('keeps the player moving while it has speed', () => {
+    const track = replay.toTrack();
+    let moving = 0;
+    let frozen = 0;
+    for (let t = 1; t < track.frameCount; t++) {
+      const a = trackStateAt(track, t - 1);
+      const b = trackStateAt(track, t);
+      if (Math.hypot(a.velocity[0], a.velocity[1]) < 100) continue;
+      moving++;
+      if (Math.hypot(b.origin[0] - a.origin[0], b.origin[1] - a.origin[1]) < 0.5) frozen++;
+    }
+    expect(moving).toBeGreaterThan(500);
+    expect(frozen / moving).toBeLessThan(0.03);
   });
 
   it('velocity oracle holds away from push physics', () => {

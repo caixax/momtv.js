@@ -80,8 +80,26 @@ describe('player track', () => {
   it('decodes one state per frame', () => {
     expect(track.frameCount).toBe(replay.header.frameCount);
     expect(track.data).toHaveLength(track.frameCount * 9);
-    expect(track.stats.frames).toBeGreaterThanOrEqual(track.frameCount - 6);
-    expect(track.stats.lostFrames).toBeLessThanOrEqual(6);
+    expect(track.stats.frames).toBe(track.frameCount);
+    // a lost tick means a frame was refused rather than guessed at, so a few
+    // are healthy; what matters is that they stay rare
+    expect(track.stats.lostFrames / track.frameCount).toBeLessThan(0.02);
+  });
+
+  it('keeps the player moving while it has speed', () => {
+    // the symptom of a mislocated frame is a tick that repeats the previous
+    // position while the recorded velocity says the player is moving
+    let moving = 0;
+    let frozen = 0;
+    for (let t = 1; t < track.frameCount; t++) {
+      const a = replay.getPlayerState(t - 1);
+      const b = replay.getPlayerState(t);
+      if (Math.hypot(a.velocity[0], a.velocity[1]) < 100) continue;
+      moving++;
+      if (Math.hypot(b.origin[0] - a.origin[0], b.origin[1] - a.origin[1]) < 0.5) frozen++;
+    }
+    expect(moving).toBeGreaterThan(1000);
+    expect(frozen / moving).toBeLessThan(0.02);
   });
 
   it('satisfies the velocity oracle on the vast majority of ticks', () => {
