@@ -40,6 +40,12 @@ try {
 
 const fmt = (n: number, d = 2): string => n.toFixed(d);
 
+/**
+ * Formats a run timer value, which the compact timeline of revision 2 does not
+ * carry. A dash says the file never recorded it, rather than printing a NaN.
+ */
+const fmtTime = (n: number): string => (Number.isFinite(n) ? `${fmt(n, 3)}s` : '-');
+
 try {
   if (mode === '--header') {
     const header = readHeader(data);
@@ -67,7 +73,7 @@ try {
     console.log('events:');
     for (const e of replay.events) {
       console.log(
-        `  tick ${String(e.tick).padStart(6)}  t=${fmt(e.time, 3).padStart(8)}s  type=${e.type} zone=${e.zoneFlag} segment=${e.majorNum}.${e.minorNum}`,
+        `  tick ${String(e.tick).padStart(6)}  t=${fmtTime(e.time).padStart(9)}  type=${e.type} zone=${e.zoneFlag} segment=${e.majorNum}.${e.minorNum}`,
       );
     }
     const track = replay.toTrack();
