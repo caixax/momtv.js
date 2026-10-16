@@ -339,6 +339,31 @@ What the remaining losses have in common: the frame carries the run timer's payl
 
 ## Map assets
 
-A BSP packs some of its materials in the pakfile lump (a zip, compressed with LZMA, method 14). The rest live in the game's VPK archives, which the viewer never bundles: a host application extracts them from a local installation and serves them, and the viewer looks them up under its `assetsBaseUrl`.
+A BSP packs some of its materials in the pakfile lump (a zip, compressed with LZMA, method 14). The rest live in the game's own files, which the viewer never bundles: it reads them where they are, in this order, and falls back to the flat colour of the map's texdata for anything it cannot find.
 
-VPK directory files (version 1 and 2) are a tree of NUL terminated strings grouped by extension, then directory, then file name, each entry carrying a CRC, a preload size, an archive index, an offset and a length. Entries with archive index 0x7fff keep their data in the directory file itself, after the tree; the rest live in the numbered archives beside it.
+1. the map's pakfile
+2. VPK archives a host application points it at
+3. loose files under its `assetsBaseUrl`
+
+VPK directory files (version 1 and 2) are a tree of NUL terminated strings grouped by extension, then directory, then file name, each entry carrying a CRC, a preload size, an archive index, an offset and a length. Entries with archive index 0x7fff keep their data in the directory file itself, after the tree; the rest live in the numbered archives beside it. Only the tree is read up front, so an archive set of several gigabytes costs a few kilobytes per texture over HTTP range requests.
+
+### Materials
+
+A VMT is a keyvalues block whose outer key is the shader. What the renderer takes from it is `$basetexture`, and how the texture's alpha is meant to be treated: `$alphatest` with `$alphatestreference` (the default is 0.5) cuts the surface away, `$translucent` or an `$alpha` below one blends it, and a `%compile...` flag or the `hidden` shader means the game does not draw the surface at all. A `patch` shader only overrides keys of the material its `include` names, which is how maps bind their own cubemaps to stock materials.
+
+### Textures
+
+VTF versions 7.0 to 7.6 appear in Momentum's files. From 7.3 the header is followed by a directory of resources, each a three byte tag, a flag byte and an offset: tag 0x01 is the thumbnail, 0x30 the image data, and the image data is wherever the directory says rather than straight after the header.
+
+Strata Source's 7.6 adds the resource `AXC`, an auxiliary compression table: a size, a word holding the compressor's level and method, and then one 32 bit compressed size per chunk, in storage order (smallest mip level first, then frame, then face). Every chunk is compressed on its own, and in the current build the compressor is Zstandard, so the viewer carries its own Zstandard decoder. Most of the game's own textures are stored this way: of the HL2 archive's 6748 textures, every one is version 7.6 with Zstandard chunks, and they decode to DXT1, DXT5 and the uncompressed formats. Model textures also use image format 70, which is BC7 at one byte per pixel; the viewer sizes it but does not decode it yet.
+
+### Maps
+
+Momentum's maps are VBSP 19 to 25. Version 25, which Strata Source writes, widens two of the structures the renderer reads and announces each change in that lump's version field:
+
+| Lump | Older | Strata |
+| --- | --- | --- |
+| FACES | version 1, 56 bytes, 16 bit plane, numedges, texinfo and dispinfo | version 2, 72 bytes, all four widened to 32 bits, two bytes of padding after `side` and `onNode` |
+| EDGES | version 0, two 16 bit vertex indices | version 1, two 32 bit ones |
+
+The lump sizes confirm it: in `df_cruton` the faces lump holds 1004472 bytes, which is 13951 faces of 72 bytes, and every face's plane, edge, texinfo, lightmap and original face field lands in range with that layout. TEXINFO, TEXDATA, PLANES, MODELS, VERTEXES and SURFEDGES are unchanged.
