@@ -10,6 +10,7 @@
  * Written from the publicly documented VTF layout.
  */
 import { lzmaDecompress } from '@caixax/mtv';
+import { decodeBc7 } from './bc7.js';
 import { decompressZstd } from './zstd.js';
 
 /** Image formats, numbered as the engine numbers them. */
@@ -479,13 +480,19 @@ export function parseVtf(data: Uint8Array): DecodedTexture {
     src = data.subarray(at, at + size);
   }
 
-  const pixels =
+  let pixels: Uint8Array;
+  if (format === FORMAT.BC7) {
+    pixels = decodeBc7(src, width, height);
+  } else if (
     format === FORMAT.DXT1 ||
     format === FORMAT.DXT1_ONEBITALPHA ||
     format === FORMAT.DXT3 ||
     format === FORMAT.DXT5
-      ? decodeDxt(src, width, height, format)
-      : decodeUncompressed(src, width, height, format);
+  ) {
+    pixels = decodeDxt(src, width, height, format);
+  } else {
+    pixels = decodeUncompressed(src, width, height, format);
+  }
 
   return { width, height, pixels };
 }
