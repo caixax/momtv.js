@@ -112,6 +112,22 @@ function foldIndexedProps(props) {
 }
 
 /**
+ * Properties the recorder writes one bit wider than the network table says.
+ * Measured against exact frame boundaries: without the extra bit every frame
+ * carrying one of these ends a bit early and throws the walk out of step.
+ */
+const EXTRA_BITS = {
+  m_iLandTick: 1,
+  m_iJumpTick: 1,
+  m_iEarlyJumpTiming: 1,
+  hasteEndTick: 1,
+  damageBoostEndTick: 1,
+  slickEndTick: 1,
+  flightEndTick: 1,
+  defragTimerEndTick: 1,
+};
+
+/**
  * Arrays the dump reports without their element encoding. The dump prints the
  * property as a bare `Array` with no length field and no elements, so the
  * encoding is filled in here.
@@ -155,6 +171,7 @@ for (const props of Object.values(classes)) {
 
 const serialise = (prop) => {
   const parts = [`k:'${prop.kind}'`, `b:${prop.bits ?? 0}`];
+  if (prop.name && EXTRA_BITS[prop.name]) parts.push(`x:${EXTRA_BITS[prop.name]}`);
   if (prop.flags?.length) parts.push(`f:${JSON.stringify(prop.flags)}`);
   if (prop.kind === 'array') {
     parts.push(`c:${prop.countBits}`, `m:${prop.max}`);

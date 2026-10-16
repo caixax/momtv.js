@@ -18,6 +18,11 @@ export interface PropEncoding {
   m?: number;
   e?: PropEncoding;
   s?: number;
+  /**
+   * Bits the recorder writes past the value, which the network table does not
+   * account for. Measured against exact frame boundaries.
+   */
+  x?: number;
 }
 
 /** Fractional bits a coordinate carries. */
@@ -32,6 +37,14 @@ const STRING_LENGTH_BITS = 9;
 const NORMAL_BITS = 12;
 /** Resolution of one normal step. */
 const NORMAL_RESOLUTION = 1 / ((1 << (NORMAL_BITS - 1)) - 1);
+
+/**
+ * Properties an older build spelled differently. The encoding is the same; the
+ * name in the replay's class table is what changed.
+ */
+const RENAMED: Record<string, string> = {
+  m_iViewModelIndex: 'm_nViewModelIndex',
+};
 
 const has = (encoding: PropEncoding, flag: string): boolean => encoding.f?.includes(flag) ?? false;
 
@@ -86,6 +99,12 @@ export type PropValue = number | number[] | string;
  * size, so a frame is never silently misread.
  */
 export function readPropValue(r: BitReader, encoding: PropEncoding): PropValue {
+  const value = readValue(r, encoding);
+  if (encoding.x) r.skipBits(encoding.x);
+  return value;
+}
+
+function readValue(r: BitReader, encoding: PropEncoding): PropValue {
   switch (encoding.k) {
     case 'int':
       // Only the width matters for walking the stream; a signed value is
@@ -154,9 +173,23 @@ export function resolveClassProps(className: string, props: readonly string[]): 
   const own = CLASS_PROPS[className] ?? {};
   const arrays = UNNAMED_ARRAYS[className] ?? [];
   let nextArray = 0;
+  const lookUp = (name: string): PropEncoding | undefined =>
+    own[name] ?? SHARED_PROPS[name] ?? FALLBACK_PROPS[name];
   return props.map((name) => {
-    const found = own[name] ?? SHARED_PROPS[name] ?? FALLBACK_PROPS[name];
-    if (found) return found;
+    const direct = lookUp(name) ?? lookUp(RENAMED[name] ?? '');
+    if (direct) return direct;
+    // A name like m_angRotation[0] is one component of a vector, which the
+    // tables describe as a whole.
+    const element = /^(.+)\[\d+\]$/.exec(name);
+    if (element) {
+      const whole = lookUp(element[1]!) ?? lookUp(RENAMED[element[1]!] ?? '');
+      if (whole && (whole.k === 'vector' || whole.k === 'vectorxy')) {
+        const component: PropEncoding = { k: 'float', b: whole.b };
+        if (whole.f) component.f = whole.f;
+        if (whole.x) component.x = whole.x;
+        return component;
+      }
+    }
     const array = arrays[nextArray++];
     if (array) return array;
     throw new MtvError('BAD_BODY', `no known encoding for ${className}::${name}`);

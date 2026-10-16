@@ -272,7 +272,8 @@ A keyframe and a frame are the same thing: the engine reads both with one routin
 3. a UBitVar count of the entities whose properties follow, then one entry each. An entry is just the slot as a UBitVar; a serial and a class index follow only when the entity is not already in that slot, which is a decision the reader makes from its own state, not something the stream marks
 4. one property payload per entry, in entry order
 5. the entities that stop being recorded: a flag bit and, when set, a count and that many slots, all as UBitVars
-6. up to four optional trailing sections, each a flag bit and, when set, a length and that many bytes, holding a network message: temp entities, sounds, user messages and entity messages, in that order
+6. four optional trailing sections, in this order: temp entities, sounds, user messages and entity messages. Each is a flag bit; the first two then carry one network message, the last two a count and that many. A message is a varint type, a varint length and that many bytes, holding a protobuf the parser does not need to read: the type matches what the engine registers, 27 for temp entities, 17 for sounds and 24 for an entity message
+7. padding to the next byte
 
 A property payload is:
 
@@ -303,11 +304,26 @@ Two consequences for a parser:
 
 This also confirms the baseline record fields independently. The recorder prints `Created baseline <n> (<class> @ <edict>:<bits>)`, and those bit counts vary per entity of the same class (seventeen `CFuncBrush` baselines ranging from 91 to 972 bits), so a baseline payload is a property subset, not a fixed dump of every property in the class.
 
-## What is still undecoded
+## Property widths the tables do not account for [verified by measurement]
 
-The property payloads of classes other than the player do not decode with the widths the game's network table dump gives, so a frame cannot yet be walked end to end. The player's payload is exact, and so is everything that surrounds it, which is why the player's position and velocity come out right and agree with an independent decode of the same ticks.
+Eight of the player's properties are written one bit wider than the game's network tables declare: `m_iLandTick`, `m_iJumpTick`, `m_iEarlyJumpTiming`, `hasteEndTick`, `damageBoostEndTick`, `slickEndTick`, `flightEndTick` and `defragTimerEndTick`. Each is a signed 32 bit integer in the tables and takes 33 bits on the wire. The extra bit is not explained, but it is not a guess either: a frame carrying one of them ends a bit early without it, which throws the next frame out of step, and with it every frame of every sample replay lines up. The same is not true of other signed 32 bit integers, `m_nPhysicalButtons` among them, which take exactly what the tables say.
 
-The dump used here was taken on a different map, so it need not describe the classes a given replay records: the suspects are the array properties, whose element widths are inferred rather than read, a 64 bit integer, and a string. A class table dumped on the same map as the replay would settle it.
+Two properties a replay from an older build records, `m_iViewModelIndex` and `m_iWorldModelIndex`, no longer exist in the tables at all.
+
+## How exact the walk is [measured]
+
+Reading the frames rather than searching for them, with the keyframe index used to resynchronise, every sample replay decodes almost completely. The remaining losses are confined to the frames where the run timer sends the two properties whose encoding is still open, a 64 bit integer and a string, and those frames sit on zone events, which is exactly where the keyframe index pins the next frame, so a loss never spreads.
+
+| Replay             | Frames read exactly | Ticks the position stands still while moving |
+| ------------------ | ------------------- | -------------------------------------------- |
+| agtricks           | 3445 of 3456        | 0.06%                                        |
+| ab_baume           | 5519 of 5520        | 0.02%                                        |
+| df_cruton          | 5728 of 5761        | 0.00%                                        |
+| bhop_badwater      | 1359 of 1360        | 0.07%                                        |
+| deathrun_unique    | 2248 of 2248        | 0.00%                                        |
+| df_waluigi_pinball | 1974 of 1974        | 0.00%                                        |
+
+For comparison, searching for the frames left between 0.1 and 2.6 percent of moving ticks standing still, and could not decode the pinball replay at all.
 
 ## Open questions
 

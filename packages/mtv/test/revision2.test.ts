@@ -37,9 +37,12 @@ describe('body revision 2', () => {
 
   it('decodes every frame with plausible player state', () => {
     const track = replay.toTrack();
-    expect(track.stats.frames).toBe(replay.frameCount);
-    // a lost tick is a frame the parser refused rather than guessed at
-    expect(track.stats.lostFrames / replay.frameCount).toBeLessThan(0.02);
+    // Every tick is accounted for: read exactly, or declared lost.
+    expect(track.stats.frames + track.stats.lostFrames).toBe(replay.frameCount);
+    // A lost tick is a frame the parser refused rather than guessed at, and
+    // the frames are read rather than searched for, so there should be
+    // essentially none.
+    expect(track.stats.lostFrames / replay.frameCount).toBeLessThan(0.01);
     let top = 0;
     for (let t = 0; t < track.frameCount; t++) {
       const s = trackStateAt(track, t);
@@ -50,6 +53,12 @@ describe('body revision 2', () => {
     }
     expect(top).toBeGreaterThan(300);
     expect(top).toBeLessThan(4000);
+  });
+
+  it('reads the frames rather than searching for them', () => {
+    const track = replay.toTrack();
+    // Resynchronising happens at the keyframe anchors, which are few.
+    expect(track.stats.resyncs + track.stats.recovered).toBeLessThan(8);
   });
 
   it('keeps the player moving while it has speed', () => {
@@ -64,7 +73,9 @@ describe('body revision 2', () => {
       if (Math.hypot(b.origin[0] - a.origin[0], b.origin[1] - a.origin[1]) < 0.5) frozen++;
     }
     expect(moving).toBeGreaterThan(500);
-    expect(frozen / moving).toBeLessThan(0.03);
+    // The position comes from the bits the recorder wrote for that tick, so a
+    // moving player should never stand still.
+    expect(frozen / moving).toBeLessThan(0.005);
   });
 
   it('velocity oracle holds away from push physics', () => {

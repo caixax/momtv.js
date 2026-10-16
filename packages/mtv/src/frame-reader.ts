@@ -11,32 +11,40 @@ import {
 /**
  * A frame is one tick's delta of the recorded entity set:
  *
- * 1. one flag bit
- * 2. one bit saying whether entities start being recorded this tick, and if so
- *    a count and one `{class, slot, serial}` record of varints each
- * 3. a count of the entities whose properties follow, then one entry each: the
- *    slot, plus a serial and a class when the parser has not seen that slot
- *    before, exactly as the engine decides it
- * 4. one property payload per entry: a count, then that many references made
- *    of a property index and, for an array property, an element index, then
- *    the values in the same order
- * 5. four optional trailing sections, each a flag bit and, when set, a length
- *    and that many bytes of a network message
+ * 1. one flag bit, whose meaning is not yet established
+ * 2. one bit saying whether entities start being recorded this tick, and when
+ *    set a count and then one record of three varints each: the baseline the
+ *    entity takes its state from, the slot it goes in, and a serial
+ * 3. a count of the entities whose properties follow, then one slot each
+ * 4. one property payload per entry, in that order
+ * 5. one bit saying whether entities stop being recorded, and when set a count
+ *    and that many slots
+ * 6. four optional trailing sections, in this order: temp entities, sounds,
+ *    user messages and entity messages. Each is a flag bit; the first two then
+ *    carry one network message, the last two a count and that many
+ * 7. padding to the next byte
+ *
+ * A property payload is a count of references, that many references, and then
+ * the values in the same order. A reference is a property index, followed by
+ * an element index when the property is an array. The references are not
+ * sorted: they come in the order the recorder noticed the changes.
  *
  * Entities are addressed by a slot the recorder assigns and reuses, so the map
- * from slot to class is built up as the walk proceeds. Entities that only
- * start being recorded this tick take their state from elsewhere and so
- * contribute nothing to the frame beyond their creation record.
+ * from slot to class is built up as the walk proceeds, starting from the
+ * creations in a keyframe. An entity that only starts being recorded this tick
+ * contributes nothing beyond its creation record, since its state comes from
+ * its baseline.
  */
-
-/** Sections that close a frame, each one optional. */
-const TAIL_SECTIONS = 1;
 
 /** Bits an array element index takes. */
 const ELEMENT_BITS = 6;
 
-/** Largest property count a payload may claim, as the engine allows. */
-const MAX_PAYLOAD_PROPS = 1000;
+/** Counts past which a frame is called corrupt rather than parsed. */
+const MAX_CREATIONS = 256;
+const MAX_DIRECTORY = 64;
+const MAX_REMOVALS = 64;
+const MAX_MESSAGES = 64;
+const MAX_MESSAGE_BYTES = 1 << 20;
 
 /** What a slot currently holds. */
 interface SlotState {
@@ -65,23 +73,19 @@ export interface EntityUpdate {
 export interface Frame {
   /** Bit offset of the frame's first bit, relative to the frame data. */
   startBit: number;
-  /** Bit offset just past the frame. */
+  /** Bit offset just past the frame, including its padding. */
   endBit: number;
   /** The leading flag, whose meaning is not yet established. */
   flag: number;
   /** Slots that started being recorded this tick. */
   created: number[];
+  /** Slots that stopped being recorded this tick. */
+  removed: number[];
   updates: EntityUpdate[];
 }
 
-/** How a reader learns which class a slot holds. */
+/** Hooks for a caller that only wants some of the properties. */
 export interface FrameReaderOptions {
-  /**
-   * Class of a slot, for slots whose class the stream names with an index the
-   * file does not explain. Returning undefined makes the frame fail to decode
-   * rather than be guessed at.
-   */
-  classForSlot?: (slot: number, classRef: number) => string | undefined;
   /** Called for each property; return false to drop its value. */
   wanted?: (className: string, propName: string) => boolean;
 }
@@ -94,17 +98,15 @@ export interface FrameReaderOptions {
  */
 export class FrameReader {
   private readonly reader: BitReader;
+  private readonly bytes: Uint8Array;
+  private readonly keyframeData: { offset: number; length: number };
   private readonly byName = new Map<string, SlotState>();
   private readonly classList: readonly ReplayClass[];
   /** Class of each baseline, which is what a creation record points at. */
   private readonly baselineClass = new Map<number, string>();
   private readonly slots = new Map<number, SlotState>();
   private readonly propBits: number;
-  private readonly classForSlot: FrameReaderOptions['classForSlot'];
   private readonly wanted: (className: string, propName: string) => boolean;
-
-  private readonly bytes: Uint8Array;
-  private readonly keyframeData: { offset: number; length: number };
 
   /** Bit offset of the start of the frame data within the body's bytes. */
   readonly baseBit: number;
@@ -119,7 +121,6 @@ export class FrameReader {
     this.totalBits = body.frameData.length * 8;
     this.propBits = propBits;
     this.classList = body.classes;
-    this.classForSlot = options.classForSlot;
     this.wanted = options.wanted ?? (() => true);
     const names = new Map(body.classes.map((c) => [c.classId, c.name]));
     for (const baseline of body.baselines) {
@@ -138,11 +139,6 @@ export class FrameReader {
     this.reader.bitPos = this.baseBit + bit;
   }
 
-  /** Forgets which class each slot holds, as a seek has to. */
-  resetSlots(): void {
-    this.slots.clear();
-  }
-
   /** Records that a slot holds a class, by name. */
   setSlotClass(slot: number, className: string): void {
     this.slots.set(slot, this.stateFor(className));
@@ -150,9 +146,8 @@ export class FrameReader {
 
   /**
    * Fills the slot map from a keyframe's creation records, which is how
-   * playback learns what the frames that follow are talking about.
-   *
-   * Only the creations are read; the rest of the keyframe is left alone.
+   * playback learns what the frames that follow are talking about. Only the
+   * creations are read; the rest of the keyframe is left alone.
    */
   seedFromKeyframe(keyframeOffset = 0): void {
     const section = this.keyframeData;
@@ -164,7 +159,9 @@ export class FrameReader {
     r.readBit();
     if (!r.readBit()) return;
     const count = r.readUBitVar();
-    r.alignByte();
+    if (count > MAX_CREATIONS) {
+      throw new MtvError('BAD_BODY', `a keyframe declares ${count} creations`);
+    }
     for (let i = 0; i < count; i++) {
       const baseline = r.readVarInt32();
       const slot = r.readVarInt32();
@@ -188,6 +185,17 @@ export class FrameReader {
     return state;
   }
 
+  /** Reads one network message: its type, its length and its bytes. */
+  private readMessage(): void {
+    const r = this.reader;
+    r.readVarInt32();
+    const bytes = r.readVarInt32();
+    if (bytes > MAX_MESSAGE_BYTES) {
+      throw new MtvError('BAD_BODY', `a trailing message declares ${bytes} bytes`);
+    }
+    r.skipBits(bytes * 8);
+  }
+
   /** Reads the next frame, leaving the walk just past it. */
   readFrame(): Frame {
     const r = this.reader;
@@ -197,62 +205,71 @@ export class FrameReader {
     const created: number[] = [];
     if (r.readBit()) {
       const count = r.readUBitVar();
-      r.alignByte(); // the records that follow are varints
+      if (count > MAX_CREATIONS) {
+        throw new MtvError('BAD_BODY', `a frame declares ${count} creations`);
+      }
       for (let i = 0; i < count; i++) {
-        // The first field indexes the baselines, which is where a new entity
-        // takes both its class and its initial state from.
         const baseline = r.readVarInt32();
         const slot = r.readVarInt32();
         r.readVarInt32(); // serial, not needed to decode
+        const name = this.baselineClass.get(baseline);
+        if (!name) throw new MtvError('BAD_BODY', `a creation names baseline ${baseline}`);
+        this.slots.set(slot, this.stateFor(name));
         created.push(slot);
-        const name = this.baselineClass.get(baseline) ?? this.classForSlot?.(slot, baseline);
-        if (name) this.slots.set(slot, this.stateFor(name));
-        else this.slots.delete(slot);
       }
     }
 
-    const order: number[] = [];
     const updateCount = r.readUBitVar();
-    for (let i = 0; i < updateCount; i++) {
-      const slot = r.readUBitVar();
-      // The engine only writes the serial and the class when the entity is not
-      // already in the slot, so the parser's own map decides whether to read
-      // them.
-      if (!this.slots.has(slot)) {
-        r.readUBitVar(); // serial
-        const classRef = r.readUBitVar();
-        const name = this.baselineClass.get(classRef) ?? this.classForSlot?.(slot, classRef);
-        if (!name) {
-          throw new MtvError('BAD_BODY', `slot ${slot} holds unknown class ${classRef}`);
-        }
-        this.slots.set(slot, this.stateFor(name));
-      }
-      order.push(slot);
+    if (updateCount > MAX_DIRECTORY) {
+      throw new MtvError('BAD_BODY', `a frame declares ${updateCount} entity updates`);
     }
+    const order: number[] = [];
+    for (let i = 0; i < updateCount; i++) order.push(r.readUBitVar());
 
     const updates: EntityUpdate[] = [];
     for (const slot of order) {
-      const state = this.slots.get(slot)!;
+      const state = this.slots.get(slot);
+      if (!state) throw new MtvError('BAD_BODY', `slot ${slot} holds no known class`);
       updates.push({ slot, className: state.className, props: this.readPayload(state) });
     }
 
-    for (let i = 0; i < TAIL_SECTIONS; i++) {
-      if (!r.readBit()) continue;
-      r.alignByte();
-      const bytes = r.readVarInt32();
-      r.skipBits(bytes * 8);
+    const removed: number[] = [];
+    if (r.readBit()) {
+      const count = r.readUBitVar();
+      if (count > MAX_REMOVALS) {
+        throw new MtvError('BAD_BODY', `a frame declares ${count} removals`);
+      }
+      for (let i = 0; i < count; i++) {
+        const slot = r.readUBitVar();
+        this.slots.delete(slot);
+        removed.push(slot);
+      }
     }
 
-    return { startBit, endBit: this.bitPos, flag, created, updates };
+    if (r.readBit()) this.readMessage(); // temp entities
+    if (r.readBit()) this.readMessage(); // sounds
+    for (const kind of ['user messages', 'entity messages']) {
+      if (!r.readBit()) continue;
+      const count = r.readUBitVar();
+      if (count > MAX_MESSAGES) {
+        throw new MtvError('BAD_BODY', `a frame declares ${count} ${kind}`);
+      }
+      for (let i = 0; i < count; i++) this.readMessage();
+    }
+
+    r.alignByte();
+    return { startBit, endBit: this.bitPos, flag, created, removed, updates };
   }
 
   private readPayload(state: SlotState): DecodedProp[] {
     const r = this.reader;
     const count = r.readUBitVar();
-    if (count > MAX_PAYLOAD_PROPS) {
-      throw new MtvError('BAD_BODY', `${state.className} payload claims ${count} properties`);
+    if (count === 0 || count > state.props.length) {
+      throw new MtvError(
+        'BAD_BODY',
+        `${state.className} claims ${count} of its ${state.props.length} properties`,
+      );
     }
-    // The references come first, then the values in the same order.
     const refs: { index: number; element?: number }[] = [];
     for (let i = 0; i < count; i++) {
       const index = r.readBits(this.propBits);
@@ -266,6 +283,7 @@ export class FrameReader {
     for (const ref of refs) {
       const encoding = state.props[ref.index]!;
       const name = state.propNames[ref.index]!;
+      // An array reference carries one element, not the whole array.
       const value = readPropValue(r, encoding.k === 'array' ? encoding.e! : encoding);
       if (this.wanted(state.className, name)) {
         out.push(

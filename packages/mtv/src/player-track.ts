@@ -1,6 +1,7 @@
 import { BitReader } from './bit-reader.js';
 import type { ReplayBody } from './body-sections.js';
 import { MtvError } from './error.js';
+import { decodeTrackExact } from './track-exact.js';
 
 /**
  * Decoded per-tick player state. Angles are degrees, positions and
@@ -211,6 +212,16 @@ export function decodePlayerTrack(
   tickInterval: number,
   propBits = 5,
 ): PlayerTrack {
+  const runStartTick = body.timeline.find((e) => e.zoneFlag === 3)?.tick ?? 0;
+  // A revision 2 body is read frame by frame, which is exact. Revision 1 lays
+  // its frames out differently and still has to be searched.
+  if (body.revision === 2) {
+    try {
+      return decodeTrackExact(body, frameCount, tickInterval, propBits, runStartTick);
+    } catch {
+      // Fall through to the search below rather than fail the whole parse.
+    }
+  }
   const listThenValues = body.revision === 2;
   // The leading 6-bit block count (number of entity blocks in the frame) is a
   // strong filter against frame-shaped bits inside the trailing non-player
