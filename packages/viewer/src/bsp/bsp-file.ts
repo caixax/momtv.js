@@ -3,8 +3,10 @@
  * Valve LZMA lump decompression, world geometry, texture names and entities.
  *
  * Written from the publicly documented BSP format (VDC wiki) against
- * Momentum Mod maps (VBSP version 19 to 22, version 20 in practice, with
- * most lumps individually LZMA compressed).
+ * Momentum Mod maps (VBSP version 19 to 25, with most lumps individually LZMA
+ * compressed). Strata Source, which Momentum runs on, widened the face and
+ * edge structures to 32 bit fields and says so in the version of each lump, so
+ * both shapes are read.
  */
 import { lzmaDecompress, VALVE_LZMA_ID } from '@caixax/mtv';
 
@@ -37,6 +39,56 @@ const SURF_NODRAW = 0x80;
 const SURF_HINT = 0x100;
 const SURF_SKIP = 0x200;
 const NON_RENDER_FLAGS = SURF_SKY2D | SURF_SKY | SURF_TRIGGER | SURF_NODRAW | SURF_HINT | SURF_SKIP;
+
+/**
+ * Where each field of a face sits.
+ *
+ * The original structure packs several indices into 16 bits; the version 2
+ * that Strata Source writes widens them to 32 and pads the two bytes after
+ * `side` and `onNode`, which is why the offsets differ throughout.
+ */
+interface FaceLayout {
+  size: number;
+  /** 32 bit indices rather than 16 bit ones. */
+  wide: boolean;
+  planeNum: number;
+  side: number;
+  firstEdge: number;
+  numEdges: number;
+  texinfo: number;
+  dispinfo: number;
+  lightOffset: number;
+  lightmapMins: number;
+  lightmapSize: number;
+}
+
+const FACE_ORIGINAL: FaceLayout = {
+  size: 56,
+  wide: false,
+  planeNum: 0,
+  side: 2,
+  firstEdge: 4,
+  numEdges: 8,
+  texinfo: 10,
+  dispinfo: 12,
+  lightOffset: 20,
+  lightmapMins: 28,
+  lightmapSize: 36,
+};
+
+const FACE_WIDE: FaceLayout = {
+  size: 72,
+  wide: true,
+  planeNum: 0,
+  side: 4,
+  firstEdge: 8,
+  numEdges: 12,
+  texinfo: 16,
+  dispinfo: 20,
+  lightOffset: 32,
+  lightmapMins: 40,
+  lightmapSize: 48,
+};
 
 /** A parsed entity from the entities lump (keyvalues as strings). */
 export type BspEntity = Record<string, string>;
@@ -111,6 +163,11 @@ function err(message: string): never {
   throw new Error(`BSP: ${message}`);
 }
 
+/** Version of a lump, which is how the widened structures are announced. */
+function lumpVersion(file: Cursor, index: number): number {
+  return file.view.getInt32(8 + index * 16 + 8, true);
+}
+
 /** Reads and decompresses a lump (Valve per-lump LZMA framing). */
 function readLump(file: Cursor, index: number): Uint8Array {
   const off = 8 + index * 16;
@@ -183,7 +240,7 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const ident = String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!);
   if (ident !== 'VBSP') err(`not a VBSP file (ident '${ident}')`);
   const version = file.view.getInt32(4, true);
-  if (version < 19 || version > 22) err(`unsupported BSP version ${version}`);
+  if (version < 19 || version > 25) err(`unsupported BSP version ${version}`);
   const mapRevision = file.view.getInt32(8 + 64 * 16, true);
 
   // --- raw lumps ---
@@ -245,10 +302,23 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   }
 
   // --- geometry ---
-  const FACE_SIZE = 56;
-  const faceCount = Math.floor(faces.length / FACE_SIZE);
+  const FACE = lumpVersion(file, LUMP.FACES) >= 2 ? FACE_WIDE : FACE_ORIGINAL;
+  const EDGE_SIZE = lumpVersion(file, LUMP.EDGES) >= 1 ? 8 : 4;
+  const faceCount = Math.floor(faces.length / FACE.size);
   const vertexCount = Math.floor(vertexes.length / 12);
   const modelCount = Math.floor(models.length / 48);
+
+  /** One of the face fields that changed width between the two versions. */
+  const faceIndex = (fo: number, field: number): number =>
+    FACE.wide ? faceView.getInt32(fo + field, true) : faceView.getInt16(fo + field, true);
+  /** The plane of a face, unsigned in the original structure. */
+  const facePlane = (fo: number): number =>
+    FACE.wide ? faceView.getInt32(fo, true) : faceView.getUint16(fo, true);
+  /** One end of an edge, widened along with the faces. */
+  const edgeVertex = (edge: number, second: boolean): number =>
+    EDGE_SIZE === 8
+      ? edgeView.getInt32(edge * 8 + (second ? 4 : 0), true)
+      : edgeView.getUint16(edge * 4 + (second ? 2 : 0), true);
 
   const bspModels: BspModel[] = [];
   for (let i = 0; i < modelCount; i++) {
@@ -292,11 +362,11 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
     const ATLAS_WIDTH = 2048;
     const placements: { face: number; w: number; h: number; lightofs: number }[] = [];
     for (let f = 0; f < faceCount; f++) {
-      const fo = f * FACE_SIZE;
-      const lightofs = faceView.getInt32(fo + 20, true);
+      const fo = f * FACE.size;
+      const lightofs = faceView.getInt32(fo + FACE.lightOffset, true);
       if (lightofs < 0 || lightofs >= lighting.length) continue;
-      const w = faceView.getInt32(fo + 36, true) + 1;
-      const h = faceView.getInt32(fo + 40, true) + 1;
+      const w = faceView.getInt32(fo + FACE.lightmapSize, true) + 1;
+      const h = faceView.getInt32(fo + FACE.lightmapSize + 4, true) + 1;
       if (w <= 0 || h <= 0 || w > 512 || h > 512) continue;
       placements.push({ face: f, w, h, lightofs });
     }
@@ -359,13 +429,13 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const buildModelMeshes = (firstFace: number, lastFace: number): BspMeshGroup[] => {
     const groups = new Map<number, Group>();
     for (let f = Math.max(0, firstFace); f < Math.min(faceCount, lastFace); f++) {
-      const fo = f * FACE_SIZE;
-      const planeNum = faceView.getUint16(fo, true);
-      const side = faceView.getUint8(fo + 2);
-      const firstEdge = faceView.getInt32(fo + 4, true);
-      const numEdges = faceView.getInt16(fo + 8, true);
-      const texinfoIdx = faceView.getInt16(fo + 10, true);
-      const dispinfoIdx = faceView.getInt16(fo + 12, true);
+      const fo = f * FACE.size;
+      const planeNum = facePlane(fo);
+      const side = faceView.getUint8(fo + FACE.side);
+      const firstEdge = faceView.getInt32(fo + FACE.firstEdge, true);
+      const numEdges = faceIndex(fo, FACE.numEdges);
+      const texinfoIdx = faceIndex(fo, FACE.texinfo);
+      const dispinfoIdx = faceIndex(fo, FACE.dispinfo);
       if (numEdges < 3) continue;
       if (dispinfoIdx !== -1) continue; // displacements: not rendered yet
 
@@ -401,8 +471,8 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
       }
 
       const rect = faceLightmap.get(f);
-      const lightmapMinsU = faceView.getInt32(fo + 28, true);
-      const lightmapMinsV = faceView.getInt32(fo + 32, true);
+      const lightmapMinsU = faceView.getInt32(fo + FACE.lightmapMins, true);
+      const lightmapMinsV = faceView.getInt32(fo + FACE.lightmapMins + 4, true);
       const materialIndex =
         texdataIdx >= 0 && texdataIdx < materialOfTexdata.length
           ? materialOfTexdata[texdataIdx]!
@@ -420,12 +490,9 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
         if ((seIdx + 1) * 4 > surfedges.length) break;
         const se = seView.getInt32(seIdx * 4, true);
         const edgeIdx = Math.abs(se);
-        if ((edgeIdx + 1) * 4 > edges.length) break;
+        if ((edgeIdx + 1) * EDGE_SIZE > edges.length) break;
         // surfedge sign selects the edge direction; take the first vertex
-        const vi =
-          se >= 0
-            ? edgeView.getUint16(edgeIdx * 4, true)
-            : edgeView.getUint16(edgeIdx * 4 + 2, true);
+        const vi = edgeVertex(edgeIdx, se < 0);
         if (vi >= vertexCount) break;
         const vo = vi * 12;
         const x = vertView.getFloat32(vo, true);
