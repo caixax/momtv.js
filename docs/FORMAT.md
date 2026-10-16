@@ -125,22 +125,21 @@ Property order in this table defines the property index used in all bit-packed e
 
 `uint32 size`, then `size` bytes of protobuf resembling `CSVCMsg_GameEventList`: repeated descriptors `{ varint eventId; string name; repeated { varint type; string key } }`. The sample defines player_jumped, player_landed, ramp_board, ramp_leave, slide_started, slide_ended, player_explosive_hit.
 
-### 5. Baselines [strong]
+### 5. Baselines [verified]
 
-`uint32 sectionSize`, then `baselineCount` records, byte aligned:
+`uint32 sectionSize`, then `baselineCount` records. Each record is self describing and they chain exactly, with no searching:
 
-- `int32 tick`: 275 for every record in the sample except the last zone region, which has -2468. Meaning unclear. [unknown]
-- varint (protobuf style): entity ordinal, contiguous 0..baselineCount-1
-- bit-packed payload, padded with zero bits to the next byte boundary
+| Field       | Type             | Notes                                       |
+| ----------- | ---------------- | ------------------------------------------- |
+| tick        | int32            | 275 for every record in the sample          |
+| entity      | varint           | recording ordinal, contiguous from 0        |
+| classId     | UBitVar          | matches the class table                     |
+| payloadBits | uint16           | exact length of the payload in bits         |
+| payload     | payloadBits bits | properties, then padding to a byte boundary |
 
-Payload:
+The layout was recovered from the engine's record reader (a 32 bit field, a varint, a UBitVar and a 16 bit length whose `(bits + 7) / 8` becomes the byte size) and confirmed on the sample: all 198 records chain byte for byte, with contiguous entity ordinals and class ids that all appear in the class table.
 
-- `UBitVar classId` (matches the class table)
-- 2 bits: field flags. Observed `(1,1)` for the player followed by two UBitVar values (56 and 27 in the sample; probably simulation and animation time) [hypothesis]. Other classes use other values; layout after the flags is not fully mapped for every class. [unknown]
-- All properties of the class, each as `propBits`-bit property index (table order, ascending) followed by the type-specific value.
-- Zero padding to byte boundary (less than 8 bits).
-
-The player baseline in the sample parses exactly to its payload end with the property encodings below. [verified]
+The payload is a 10 bit record header followed by every property of the class in ascending index order, each as `{propBits index}{value}`. For the player this consumes the declared 931 bits exactly, with no padding left over, decoding all 26 properties. `m_hViewModel` (an array property) occupies 55 bits there.
 
 ### 6. Keyframe index [verified]
 

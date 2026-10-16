@@ -192,6 +192,12 @@ const PLAYER_PROP_DECODERS: Record<string, PropDecoder> = {
 /** The class name the player entity uses in the replay class table. */
 const PLAYER_CLASS = 'CMomentumPlayer';
 
+/** Bits of record header before a baseline payload's property list. */
+const BASELINE_HEADER_BITS = 10;
+
+/** Width of the m_hViewModel array property inside a baseline payload. */
+const BASELINE_VIEWMODEL_ARRAY_BITS = 55;
+
 /**
  * Decodes the per-tick player track from the body's frame data.
  *
@@ -277,24 +283,29 @@ export function decodePlayerTrack(
   const playerBaseline = body.baselines.find((b) => b.classId === playerClass.classId);
   if (playerBaseline) {
     try {
-      const r = new BitReader(bytes, playerBaseline.payloadOffset, playerBaseline.payloadLength);
-      r.readUBitVar(); // class id
-      const f1 = r.readBit();
-      const f2 = r.readBit();
-      if (f1) r.readUBitVar(); // simulation time delta
-      if (f2) r.readUBitVar(); // animation time delta
+      const r = new BitReader(bytes, 0, bytes.length);
+      // the payload opens with a 10 bit record header, then every property of
+      // the class in ascending index order. Decoding the known sample consumes
+      // the declared bit length exactly, with no padding left over.
+      r.bitPos = playerBaseline.payloadBitOffset + BASELINE_HEADER_BITS;
+      const endBit = playerBaseline.payloadBitOffset + playerBaseline.payloadBits;
       let last = -1;
-      while (r.remainingBits >= 8) {
+      while (r.bitPos + propBits <= endBit) {
         const idx = r.readBits(propBits);
         if (idx <= last || idx >= playerClass.props.length) break;
         last = idx;
+        if (playerClass.props[idx] === 'm_hViewModel') {
+          // an array property; in a baseline it occupies a fixed span
+          r.readBits(BASELINE_VIEWMODEL_ARRAY_BITS);
+          continue;
+        }
         const dec = decoders[idx];
         if (!dec) break;
         dec(r, state);
       }
     } catch (error) {
       if (!(error instanceof MtvError)) throw error;
-      // partial seed is fine; frames fill in the rest
+      // a partial seed is fine; the frames fill in the rest
     }
   }
 
