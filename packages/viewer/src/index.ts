@@ -61,4 +61,6 @@ export {
   type PropModel,
 } from './props.js';
 export { PropRenderer } from './gl/prop-renderer.js';
+export { SkyRenderer } from './gl/sky-renderer.js';
+export { loadSky, SKY_SIDES, type Sky, type SkyFace } from './sky.js';
 export { createMaterialResolver, type MaterialResolver } from './materials.js';

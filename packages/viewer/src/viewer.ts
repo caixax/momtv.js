@@ -3,6 +3,8 @@ import { parseBsp, type BspMap } from './bsp/bsp-file.js';
 import { linkBrushEntities, type LinkedEntity } from './entities.js';
 import { MapRenderer } from './gl/map-renderer.js';
 import { PropRenderer } from './gl/prop-renderer.js';
+import { SkyRenderer } from './gl/sky-renderer.js';
+import { loadSky } from './sky.js';
 import { mat4FromAngles } from './gl/math.js';
 import { loadStaticProps, type LoadPropsOptions } from './props.js';
 import { createMaterialResolver, loadMaterials, type LoadMaterialsOptions } from './materials.js';
@@ -22,6 +24,8 @@ export interface ViewerOptions extends ResolveMapOptions, LoadMaterialsOptions {
   noTextures?: boolean;
   /** Skip the map's static props. */
   noProps?: boolean;
+  /** Skip the map's sky. */
+  noSky?: boolean;
 }
 
 /** What to load: a replay with an optional explicit map. */
@@ -73,6 +77,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
   if (!gl) throw new Error('WebGL2 is required');
   const renderer = new MapRenderer(gl);
   const props = new PropRenderer(gl);
+  const sky = new SkyRenderer(gl);
 
   let replay: MtvReplay | null = null;
   let map: BspMap | null = null;
@@ -174,6 +179,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
           ? poseToCamera(thirdPersonCamera(state))
           : poseToCamera(firstPersonCamera(state));
     const shot = { ...cam, fovYDegrees: options.fov ?? 90 };
+    sky.render(shot);
     renderer.render(shot);
     props.render(shot);
   };
@@ -212,6 +218,9 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
       const resolver = await createMaterialResolver(map, options);
       const materials = options.noTextures ? undefined : await loadMaterials(map, options);
       renderer.upload(map, materials);
+      if (!options.noSky && !options.noTextures) {
+        sky.upload(await loadSky(map.skyName, resolver));
+      }
       if (!options.noProps && !options.noTextures) {
         const propOptions: LoadPropsOptions = {};
         if (options.onMissing) propOptions.onMissing = options.onMissing;
@@ -259,6 +268,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
       window.removeEventListener('keyup', keyUp);
       renderer.dispose();
       props.dispose();
+      sky.dispose();
     },
   };
 }
