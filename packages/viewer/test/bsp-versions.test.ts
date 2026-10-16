@@ -4,6 +4,8 @@ import { parseBsp } from '../src/index.js';
 /** Lump indices this builder fills. */
 const LUMP = {
   ENTITIES: 0,
+  DISPINFO: 26,
+  DISP_VERTS: 33,
   PLANES: 1,
   TEXDATA: 2,
   VERTEXES: 3,
@@ -16,8 +18,13 @@ const LUMP = {
   TEXDATA_STRING_TABLE: 44,
 } as const;
 
-/** One square face, as either the original structure or the widened one. */
-function buildMap(wide: boolean): Uint8Array {
+/**
+ * One square face, as either the original structure or the widened one.
+ *
+ * @param displacement - turn the face into a displacement of this power, with
+ * the middle point of its grid pushed up
+ */
+function buildMap(wide: boolean, displacement?: number): Uint8Array {
   const lumps = new Map<number, { data: Uint8Array; version: number }>();
   const put = (index: number, data: Uint8Array, version = 0) =>
     lumps.set(index, { data, version });
@@ -93,6 +100,24 @@ function buildMap(wide: boolean): Uint8Array {
   table.view.setInt32(0, 0, true);
   put(LUMP.TEXDATA_STRING_TABLE, table.data);
 
+  if (displacement !== undefined) {
+    const side = (1 << displacement) + 1;
+    const stride = wide ? 232 : 176;
+    const info = bytes(stride);
+    // start at the first corner, vertices from zero, and the power
+    info.view.setFloat32(0, 0, true);
+    info.view.setFloat32(4, 0, true);
+    info.view.setFloat32(8, 0, true);
+    info.view.setInt32(12, 0, true);
+    info.view.setInt32(20, displacement, true);
+    put(LUMP.DISPINFO, info.data);
+    const dv = bytes(side * side * 20);
+    const middle = Math.floor((side * side) / 2);
+    dv.view.setFloat32(middle * 20 + 8, 1, true); // straight up
+    dv.view.setFloat32(middle * 20 + 12, 32, true); // by 32 units
+    put(LUMP.DISP_VERTS, dv.data);
+  }
+
   const face = bytes(wide ? 72 : 56);
   if (wide) {
     face.view.setInt32(0, 0, true); // plane
@@ -100,7 +125,7 @@ function buildMap(wide: boolean): Uint8Array {
     face.view.setInt32(8, 0, true); // first edge
     face.view.setInt32(12, 4, true); // edge count
     face.view.setInt32(16, 0, true); // texinfo
-    face.view.setInt32(20, -1, true); // no displacement
+    face.view.setInt32(20, displacement === undefined ? -1 : 0, true);
     face.view.setInt32(32, -1, true); // no lighting
   } else {
     face.view.setUint16(0, 0, true);
@@ -108,7 +133,7 @@ function buildMap(wide: boolean): Uint8Array {
     face.view.setInt32(4, 0, true);
     face.view.setInt16(8, 4, true);
     face.view.setInt16(10, 0, true);
-    face.view.setInt16(12, -1, true);
+    face.view.setInt16(12, displacement === undefined ? -1 : 0, true);
     face.view.setInt32(20, -1, true);
   }
   put(LUMP.FACES, face.data, wide ? 2 : 1);
@@ -163,6 +188,29 @@ describe('parseBsp across BSP versions', () => {
       expect([...group.normals.subarray(0, 3)]).toEqual([0, 0, 1]);
     });
   }
+
+  for (const wide of [false, true]) {
+    const what = wide ? 'the widened Strata structures' : 'the original structures';
+    it(`builds the terrain of a displacement written with ${what}`, () => {
+      const map = parseBsp(buildMap(wide, 2));
+      const group = map.world[0]!;
+      // a power of two gives a five by five grid and its thirty two triangles
+      expect(group.positions).toHaveLength(25 * 3);
+      expect(group.indices).toHaveLength(32 * 3);
+      // the grid spans the face, and its middle point was pushed up
+      const z = [...group.positions].filter((_, i) => i % 3 === 2);
+      expect(Math.max(...z)).toBeCloseTo(32);
+      expect(z.filter((v) => v === 0)).toHaveLength(24);
+      const xs = [...group.positions].filter((_, i) => i % 3 === 0);
+      expect(Math.min(...xs)).toBe(0);
+      expect(Math.max(...xs)).toBe(64);
+    });
+  }
+
+  it('leaves a displacement alone when its lumps are missing', () => {
+    const map = parseBsp(buildMap(true));
+    expect(map.world[0]!.positions).toHaveLength(4 * 3);
+  });
 
   it('still refuses a version it does not know', () => {
     const map = buildMap(true);

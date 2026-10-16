@@ -90,6 +90,16 @@ const FACE_WIDE: FaceLayout = {
   lightmapSize: 48,
 };
 
+/**
+ * Bytes one displacement takes. The original structure is 176 bytes; Strata
+ * Source widened the neighbour data to 232, and which one a map uses is
+ * settled by reading it rather than by trusting a version.
+ */
+const DISPLACEMENT_SIZES = [176, 232];
+
+/** Bytes one displacement vertex takes: a direction, a distance and an alpha. */
+const DISPLACEMENT_VERTEX_SIZE = 20;
+
 /** A parsed entity from the entities lump (keyvalues as strings). */
 export type BspEntity = Record<string, string>;
 
@@ -174,6 +184,36 @@ function err(message: string): never {
   throw new Error(`BSP: ${message}`);
 }
 
+/**
+ * Works out how long one displacement record is, by checking that the records
+ * account for exactly the vertices the map carries.
+ *
+ * @returns the stride, or 0 when the lump cannot be read that way
+ */
+function displacementStride(info: Uint8Array, vertexBytes: number): number {
+  if (info.length === 0) return 0;
+  const view = new DataView(info.buffer, info.byteOffset, info.byteLength);
+  const vertices = Math.floor(vertexBytes / DISPLACEMENT_VERTEX_SIZE);
+  for (const stride of DISPLACEMENT_SIZES) {
+    if (info.length % stride !== 0) continue;
+    const count = info.length / stride;
+    let running = 0;
+    let plausible = true;
+    for (let i = 0; i < count; i++) {
+      const start = view.getInt32(i * stride + 12, true);
+      const power = view.getInt32(i * stride + 20, true);
+      if (power < 2 || power > 4 || start !== running) {
+        plausible = false;
+        break;
+      }
+      const side = (1 << power) + 1;
+      running += side * side;
+    }
+    if (plausible && running === vertices) return stride;
+  }
+  return 0;
+}
+
 /** Version of a lump, which is how the widened structures are announced. */
 function lumpVersion(file: Cursor, index: number): number {
   return file.view.getInt32(8 + index * 16 + 8, true);
@@ -232,6 +272,116 @@ export function parseEntitiesText(text: string): BspEntity[] {
   return entities;
 }
 
+/** Everything one displacement needs to turn its face into a grid. */
+interface DisplacementJob {
+  info: DataView;
+  verts: DataView;
+  stride: number;
+  index: number;
+  /** The four corners of the face, in the order its edges wind. */
+  corners: number[][];
+  /** Index of the first vertex this face writes. */
+  baseVertex: number;
+  emitVertex: (
+    position: readonly number[],
+    normal: readonly number[],
+    flat: readonly number[],
+  ) => void;
+  indices: number[];
+}
+
+/**
+ * Builds the surface of one displacement.
+ *
+ * A displacement takes the flat quad of its face and subdivides it into a grid
+ * of (2^power + 1) points a side, each pushed along its own direction by its
+ * own distance. The grid starts at whichever corner of the face is nearest the
+ * start position the lump records, and runs row by row from there, which is
+ * what makes neighbouring displacements meet along their shared edges.
+ *
+ * Texture and lightmap coordinates follow the flat quad rather than the pushed
+ * points, which is how the compiler laid them out.
+ */
+function buildDisplacement(job: DisplacementJob, infoBytes: number, vertexBytes: number): void {
+  const at = job.index * job.stride;
+  if (at + job.stride > infoBytes) return;
+  const start = [
+    job.info.getFloat32(at, true),
+    job.info.getFloat32(at + 4, true),
+    job.info.getFloat32(at + 8, true),
+  ];
+  const vertStart = job.info.getInt32(at + 12, true);
+  const power = job.info.getInt32(at + 20, true);
+  if (power < 2 || power > 4) return;
+  const side = (1 << power) + 1;
+  if ((vertStart + side * side) * DISPLACEMENT_VERTEX_SIZE > vertexBytes) return;
+
+  // the corner nearest the recorded start is where the grid begins
+  let first = 0;
+  let nearest = Infinity;
+  for (let i = 0; i < 4; i++) {
+    const c = job.corners[i]!;
+    const d = (c[0]! - start[0]!) ** 2 + (c[1]! - start[1]!) ** 2 + (c[2]! - start[2]!) ** 2;
+    if (d < nearest) {
+      nearest = d;
+      first = i;
+    }
+  }
+  const quad = [0, 1, 2, 3].map((i) => job.corners[(first + i) % 4]!);
+
+  const positions: number[][] = [];
+  const flats: number[][] = [];
+  for (let i = 0; i < side; i++) {
+    const u = i / (side - 1);
+    const left = [0, 1, 2].map((k) => quad[0]![k]! + (quad[1]![k]! - quad[0]![k]!) * u);
+    const right = [0, 1, 2].map((k) => quad[3]![k]! + (quad[2]![k]! - quad[3]![k]!) * u);
+    for (let j = 0; j < side; j++) {
+      const v = j / (side - 1);
+      const flat = [0, 1, 2].map((k) => left[k]! + (right[k]! - left[k]!) * v);
+      const vo = (vertStart + i * side + j) * DISPLACEMENT_VERTEX_SIZE;
+      const distance = job.verts.getFloat32(vo + 12, true);
+      positions.push([
+        flat[0]! + job.verts.getFloat32(vo, true) * distance,
+        flat[1]! + job.verts.getFloat32(vo + 4, true) * distance,
+        flat[2]! + job.verts.getFloat32(vo + 8, true) * distance,
+      ]);
+      flats.push(flat);
+    }
+  }
+
+  // Normals from the surface itself, so terrain shades as the shape it is.
+  for (let i = 0; i < side; i++) {
+    for (let j = 0; j < side; j++) {
+      const here = positions[i * side + j]!;
+      const along = positions[i * side + Math.min(j + 1, side - 1)]!;
+      const down = positions[Math.min(i + 1, side - 1) * side + j]!;
+      const a = [along[0]! - here[0]!, along[1]! - here[1]!, along[2]! - here[2]!];
+      const b = [down[0]! - here[0]!, down[1]! - here[1]!, down[2]! - here[2]!];
+      let n = [
+        a[1]! * b[2]! - a[2]! * b[1]!,
+        a[2]! * b[0]! - a[0]! * b[2]!,
+        a[0]! * b[1]! - a[1]! * b[0]!,
+      ];
+      const length = Math.hypot(n[0]!, n[1]!, n[2]!);
+      n = length > 1e-6 ? n.map((c) => c / length) : [0, 0, 1];
+      job.emitVertex(here, n, flats[i * side + j]!);
+    }
+  }
+
+  const base = job.baseVertex;
+  for (let i = 0; i + 1 < side; i++) {
+    for (let j = 0; j + 1 < side; j++) {
+      const a = base + i * side + j;
+      const b = a + 1;
+      const c = base + (i + 1) * side + j;
+      const d = c + 1;
+      // the diagonal alternates, as the compiler's own triangles do
+      if ((i + j) % 2 === 0) job.indices.push(a, c, b, b, c, d);
+      else job.indices.push(a, c, d, a, d, b);
+    }
+  }
+}
+
 function parseVec3(s: string | undefined): [number, number, number] | undefined {
   if (!s) return undefined;
   const parts = s.trim().split(/\s+/).map(Number);
@@ -267,6 +417,9 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const planes = readLump(file, LUMP.PLANES);
   const models = readLump(file, LUMP.MODELS);
   const pakfile = readLump(file, LUMP.PAKFILE);
+  // terrain: a displacement turns one flat quad into a grid of offset points
+  const dispInfo = readLump(file, LUMP.DISPINFO);
+  const dispVerts = readLump(file, LUMP.DISP_VERTS);
   // HDR lighting is preferred when the map ships it, matching what the game
   // renders on modern hardware
   const lightingHdr = readLump(file, LUMP.LIGHTING_HDR);
@@ -318,6 +471,10 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const faceCount = Math.floor(faces.length / FACE.size);
   const vertexCount = Math.floor(vertexes.length / 12);
   const modelCount = Math.floor(models.length / 48);
+
+  const dispStride = displacementStride(dispInfo, dispVerts.length);
+  const diView = new DataView(dispInfo.buffer, dispInfo.byteOffset, dispInfo.byteLength);
+  const dvView = new DataView(dispVerts.buffer, dispVerts.byteOffset, dispVerts.byteLength);
 
   /** One of the face fields that changed width between the two versions. */
   const faceIndex = (fo: number, field: number): number =>
@@ -448,7 +605,9 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
       const texinfoIdx = faceIndex(fo, FACE.texinfo);
       const dispinfoIdx = faceIndex(fo, FACE.dispinfo);
       if (numEdges < 3) continue;
-      if (dispinfoIdx !== -1) continue; // displacements: not rendered yet
+      // A displacement replaces its face with a grid; without the lumps that
+      // describe it there is nothing to draw.
+      if (dispinfoIdx !== -1 && (dispStride === 0 || numEdges !== 4)) continue;
 
       let flags = 0;
       let texdataIdx = -1;
@@ -495,7 +654,9 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
       }
 
       const baseVertex = group.positions.length / 3;
-      let emitted = 0;
+
+      /** The face's own vertices, in the order its edges wind. */
+      const corners: number[][] = [];
       for (let e = 0; e < numEdges; e++) {
         const seIdx = firstEdge + e;
         if ((seIdx + 1) * 4 > surfedges.length) break;
@@ -506,24 +667,35 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
         const vi = edgeVertex(edgeIdx, se < 0);
         if (vi >= vertexCount) break;
         const vo = vi * 12;
-        const x = vertView.getFloat32(vo, true);
-        const y = vertView.getFloat32(vo + 4, true);
-        const z = vertView.getFloat32(vo + 8, true);
+        corners.push([
+          vertView.getFloat32(vo, true),
+          vertView.getFloat32(vo + 4, true),
+          vertView.getFloat32(vo + 8, true),
+        ]);
+      }
+
+      /** Writes one vertex, with its texture and lightmap coordinates. */
+      const emitVertex = (
+        position: readonly number[],
+        normal: readonly number[],
+        /** Where on the flat face it sits, which is what the coordinates follow. */
+        flat: readonly number[],
+      ): void => {
+        const [x, y, z] = position as [number, number, number];
+        const [fx, fy, fz] = flat as [number, number, number];
         group.positions.push(x, y, z);
-        group.normals.push(nx, ny, nz);
+        group.normals.push(normal[0]!, normal[1]!, normal[2]!);
         if (tv) {
           group.uvs.push(
-            x * tv[0]! + y * tv[1]! + z * tv[2]! + tv[3]!,
-            x * tv[4]! + y * tv[5]! + z * tv[6]! + tv[7]!,
+            fx * tv[0]! + fy * tv[1]! + fz * tv[2]! + tv[3]!,
+            fx * tv[4]! + fy * tv[5]! + fz * tv[6]! + tv[7]!,
           );
         } else {
           group.uvs.push(0, 0);
         }
-        // lightmap coordinates: luxel space, shifted by the face's minimum
-        // and normalized against the atlas
         if (lv && rect && lightmapAtlas) {
-          const lu = x * lv[0]! + y * lv[1]! + z * lv[2]! + lv[3]! - lightmapMinsU;
-          const lvv = x * lv[4]! + y * lv[5]! + z * lv[6]! + lv[7]! - lightmapMinsV;
+          const lu = fx * lv[0]! + fy * lv[1]! + fz * lv[2]! + lv[3]! - lightmapMinsU;
+          const lvv = fx * lv[4]! + fy * lv[5]! + fz * lv[6]! + lv[7]! - lightmapMinsV;
           group.lightmapUvs.push(
             (rect.x + Math.max(0, Math.min(rect.w - 1, lu)) + 0.5) / lightmapAtlas.width,
             (rect.y + Math.max(0, Math.min(rect.h - 1, lvv)) + 0.5) / lightmapAtlas.height,
@@ -531,9 +703,31 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
         } else {
           group.lightmapUvs.push(-1, -1);
         }
-        emitted++;
+      };
+
+      if (dispinfoIdx !== -1) {
+        if (corners.length === 4) {
+          buildDisplacement(
+            {
+              info: diView,
+              verts: dvView,
+              stride: dispStride,
+              index: dispinfoIdx,
+              corners,
+              baseVertex,
+              emitVertex,
+              indices: group.indices,
+            },
+            dispInfo.length,
+            dispVerts.length,
+          );
+        }
+        continue;
       }
-      for (let t = 2; t < emitted; t++) {
+
+      const normal = [nx, ny, nz];
+      for (const point of corners) emitVertex(point, normal, point);
+      for (let t = 2; t < corners.length; t++) {
         group.indices.push(baseVertex, baseVertex + t - 1, baseVertex + t);
       }
     }
