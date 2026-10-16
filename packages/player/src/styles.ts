@@ -23,51 +23,102 @@ export const CSS = `
 .mtvp * { box-sizing: border-box; }
 .mtvp canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
-/* the run readout, in the corner the game puts it */
-.mtvp-hud {
+/* the run readout, laid out the way the game lays it out */
+.mtvp-hud { position: absolute; inset: 0; pointer-events: none; }
+.mtvp-hud.mtvp-hidden { display: none; }
+
+/* timer and stage, across the top */
+.mtvp-hud-top {
   position: absolute;
-  left: 16px;
   top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  pointer-events: none;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, .85);
 }
 .mtvp-timer {
-  font-size: 34px;
+  font-size: 38px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: .5px;
   line-height: 1;
 }
 .mtvp-timer.mtvp-finished { color: var(--mtvp-accent); }
-.mtvp-split { font-size: 13px; opacity: .75; font-variant-numeric: tabular-nums; min-height: 18px; }
+.mtvp-split {
+  margin-top: 4px;
+  font-size: 14px;
+  opacity: .8;
+  font-variant-numeric: tabular-nums;
+  min-height: 18px;
+  letter-spacing: .04em;
+}
+
+/* the crosshair, and the speed just under it */
+.mtvp-hud-middle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.mtvp-cross { position: relative; width: 11px; height: 11px; opacity: .8; }
+.mtvp-cross::before, .mtvp-cross::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 2px rgba(0, 0, 0, .9);
+}
+.mtvp-cross::before { left: 50%; top: 0; width: 1px; height: 100%; margin-left: -.5px; }
+.mtvp-cross::after { top: 50%; left: 0; height: 1px; width: 100%; margin-top: -.5px; }
 .mtvp-speed {
-  font-size: 26px;
-  font-weight: 600;
+  margin-top: 26px;
+  font-size: 40px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  color: #fff;
+  text-shadow: 0 2px 5px rgba(0, 0, 0, .85);
+  transition: color .09s linear;
 }
-.mtvp-speed span { font-size: 12px; font-weight: 400; opacity: .7; margin-left: 4px; }
-.mtvp-detail { font-size: 12px; opacity: .65; font-variant-numeric: tabular-nums; white-space: pre; }
+.mtvp-speed.mtvp-faster { color: #5fa8ff; }
+.mtvp-speed.mtvp-slower { color: #ff5a52; }
 
-/* the keys the runner pressed */
-.mtvp-keys { display: grid; grid-template-columns: repeat(3, 26px); gap: 3px; margin-top: 4px; }
+/* the keys the runner pressed, along the bottom */
+.mtvp-hud-bottom {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.mtvp-keys { display: grid; grid-template-columns: repeat(3, 34px); gap: 4px; justify-content: center; }
 .mtvp-key {
-  height: 22px;
-  border: 1px solid rgba(255, 255, 255, .25);
-  border-radius: 3px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  background: rgba(0, 0, 0, .35);
-  opacity: .45;
+  background: rgba(0, 0, 0, .4);
+  opacity: .5;
 }
 .mtvp-key.mtvp-on { background: var(--mtvp-accent); border-color: var(--mtvp-accent); color: #10151b; opacity: 1; }
 .mtvp-key.mtvp-wide { grid-column: span 3; }
+
+/* the small print, out of the way in a corner */
+.mtvp-detail {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  font-size: 12px;
+  opacity: .55;
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+}
 
 /* the bar along the bottom */
 .mtvp-bar {

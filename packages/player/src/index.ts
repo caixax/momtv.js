@@ -169,6 +169,11 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
 
   /** Zone events in order, to show the last one the run went through. */
   let zones: { tick: number; label: string }[] = [];
+  /** Units per second a speed has to beat its average by to count as a change. */
+  const SPEED_DEADZONE = 0.3;
+  /** How quickly that average follows the speed. */
+  const SPEED_FOLLOW = 0.25;
+  let lastSpeed = 0;
 
   // --- the run readout ---
   const KEYS: [string, number][] = [
@@ -186,8 +191,21 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
     const finished = endTime > 0 && elapsed >= endTime;
     ui.hud.timer.textContent = formatTime(finished ? endTime : elapsed);
     ui.hud.timer.classList.toggle('mtvp-finished', finished);
+    // Speed reads like the game's: the number alone, blue while it climbs,
+    // red while it falls, white when it holds.
     const speed = Math.hypot(state.velocity[0], state.velocity[1]);
-    ui.hud.speed.innerHTML = `${Math.round(speed)}<span>u/s</span>`;
+    ui.hud.speed.textContent = String(Math.round(speed));
+    // Against a trailing average rather than the frame before, so the colour
+    // means the same at any playback speed.
+    lastSpeed += (speed - lastSpeed) * SPEED_FOLLOW;
+    const trend =
+      speed > lastSpeed + SPEED_DEADZONE
+        ? 'faster'
+        : speed < lastSpeed - SPEED_DEADZONE
+          ? 'slower'
+          : '';
+    ui.hud.speed.classList.toggle('mtvp-faster', trend === 'faster');
+    ui.hud.speed.classList.toggle('mtvp-slower', trend === 'slower');
     ui.hud.detail.textContent =
       `tick ${state.tick}  ${state.onGround ? 'ground' : 'air'}\n` +
       `pos ${state.origin.map((v) => Math.round(v)).join(' ')}`;
@@ -251,9 +269,12 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   ui.seek.addEventListener('pointercancel', endDrag);
 
   ui.speedSelect.addEventListener('change', () => viewer.setSpeed(Number(ui.speedSelect.value)));
-  ui.cameraSelect.addEventListener('change', () =>
-    viewer.setCamera(ui.cameraSelect.value as 'firstperson'),
-  );
+  /** The crosshair belongs to the runner's own view, not to the others. */
+  const applyCamera = (mode: string): void => {
+    viewer.setCamera(mode as 'firstperson');
+    ui.hud.crosshair.style.display = mode === 'firstperson' ? '' : 'none';
+  };
+  ui.cameraSelect.addEventListener('change', () => applyCamera(ui.cameraSelect.value));
   ui.settingsButton.addEventListener('click', () => ui.menu.classList.toggle('mtvp-open'));
   ui.fullscreenButton.addEventListener('click', () => {
     if (document.fullscreenElement === ui.root) void document.exitFullscreen();
@@ -261,7 +282,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   });
   ui.settings.fov.addEventListener('input', () => viewer.setFov(Number(ui.settings.fov.value)));
   ui.settings.hud.addEventListener('change', () => {
-    ui.hud.panel.style.display = ui.settings.hud.checked ? '' : 'none';
+    ui.hud.panel.classList.toggle('mtvp-hidden', !ui.settings.hud.checked);
   });
   ui.settings.props.addEventListener('change', () =>
     viewer.setLayer('props', ui.settings.props.checked),
@@ -306,7 +327,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       const order = ['firstperson', 'thirdperson', 'free'];
       const next = order[(order.indexOf(ui.cameraSelect.value) + 1) % order.length]!;
       ui.cameraSelect.value = next;
-      viewer.setCamera(next as 'firstperson');
+      applyCamera(next);
     }
     wake();
   };
@@ -422,7 +443,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
       duration = viewer.clock?.duration ?? 0;
       drawZones();
       viewer.setSpeed(Number(ui.speedSelect.value));
-      viewer.setCamera(ui.cameraSelect.value as 'firstperson');
+      applyCamera(ui.cameraSelect.value);
       ui.loading.panel.classList.add('mtvp-gone');
       wake();
       if (options.autoplay ?? true) viewer.play();
@@ -438,7 +459,7 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   if (options.camera) ui.cameraSelect.value = options.camera;
   if (options.hud === false) {
     ui.settings.hud.checked = false;
-    ui.hud.panel.style.display = 'none';
+    ui.hud.panel.classList.add('mtvp-hidden');
   }
   if (options.loop) ui.settings.loop.checked = true;
   if (options.fov) ui.settings.fov.value = String(options.fov);

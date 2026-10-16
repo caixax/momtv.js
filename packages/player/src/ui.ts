@@ -35,6 +35,7 @@ export interface PlayerUi {
     timer: HTMLElement;
     split: HTMLElement;
     speed: HTMLElement;
+    crosshair: HTMLElement;
     detail: HTMLElement;
     keys: Map<string, HTMLElement>;
   };
@@ -83,13 +84,20 @@ export function buildUi(container: HTMLElement): PlayerUi {
   const canvas = el('canvas');
   root.append(canvas);
 
-  // --- the run readout ---
+  // --- the run readout, in three places like the game's own ---
   const hudPanel = el('div', 'mtvp-hud');
+
+  const top = el('div', 'mtvp-hud-top');
   const timer = el('div', 'mtvp-timer', '0:00.000');
   const split = el('div', 'mtvp-split', '');
-  const speed = el('div', 'mtvp-speed');
-  speed.innerHTML = '0<span>u/s</span>';
-  const detail = el('div', 'mtvp-detail', '');
+  top.append(timer, split);
+
+  const middle = el('div', 'mtvp-hud-middle');
+  const crosshair = el('div', 'mtvp-cross');
+  const speed = el('div', 'mtvp-speed', '0');
+  middle.append(crosshair, speed);
+
+  const bottom = el('div', 'mtvp-hud-bottom');
   const keysBox = el('div', 'mtvp-keys');
   const keys = new Map<string, HTMLElement>();
   const addKey = (name: string, label: string, wide = false): void => {
@@ -97,7 +105,7 @@ export function buildUi(container: HTMLElement): PlayerUi {
     keys.set(name, node);
     keysBox.append(node);
   };
-  // a keypad: strafes and forward on top, then back, then the two big ones
+  // a keypad: forward over the strafes, then the two big ones
   addKey('spacer1', '');
   addKey('forward', 'W');
   addKey('spacer2', '');
@@ -108,7 +116,10 @@ export function buildUi(container: HTMLElement): PlayerUi {
   addKey('jump', 'SPACE', true);
   keys.get('spacer1')!.style.visibility = 'hidden';
   keys.get('spacer2')!.style.visibility = 'hidden';
-  hudPanel.append(timer, split, speed, detail, keysBox);
+  bottom.append(keysBox);
+
+  const detail = el('div', 'mtvp-detail', '');
+  hudPanel.append(top, middle, bottom, detail);
   root.append(hudPanel);
 
   // --- the bar ---
@@ -212,7 +223,7 @@ export function buildUi(container: HTMLElement): PlayerUi {
     root,
     canvas,
     loading: { panel: loadPanel, title: loadTitle, detail: loadDetail, fill: loadFill, steps },
-    hud: { panel: hudPanel, timer, split, speed, detail, keys },
+    hud: { panel: hudPanel, timer, split, speed, crosshair, detail, keys },
     bar,
     playButton,
     seek,

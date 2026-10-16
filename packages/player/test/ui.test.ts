@@ -43,6 +43,23 @@ describe('buildUi', () => {
     expect([...ui.loading.steps.keys()]).toEqual([...LOADING_STEPS]);
   });
 
+  it('puts the timer on top, the speed in the middle and the keys below', () => {
+    const ui = buildUi(container);
+    expect(ui.hud.timer.parentElement?.className).toBe('mtvp-hud-top');
+    expect(ui.hud.split.parentElement?.className).toBe('mtvp-hud-top');
+    expect(ui.hud.speed.parentElement?.className).toBe('mtvp-hud-middle');
+    expect(ui.hud.crosshair.parentElement?.className).toBe('mtvp-hud-middle');
+    // the crosshair comes first, so the speed reads under it
+    expect(ui.hud.crosshair.nextElementSibling).toBe(ui.hud.speed);
+    expect(ui.hud.keys.get('jump')?.parentElement?.parentElement?.className).toBe('mtvp-hud-bottom');
+  });
+
+  it('shows the speed as a number on its own', () => {
+    const ui = buildUi(container);
+    expect(ui.hud.speed.textContent).toBe('0');
+    expect(ui.hud.speed.querySelector('span')).toBeNull();
+  });
+
   it('has a key for every input it shows', () => {
     const ui = buildUi(container);
     for (const key of ['forward', 'back', 'left', 'right', 'jump', 'duck']) {
