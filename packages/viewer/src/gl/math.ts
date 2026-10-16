@@ -88,3 +88,39 @@ export function mat4Translation(x: number, y: number, z: number): Mat4 {
   m[14] = z;
   return m;
 }
+
+/**
+ * Placement of a brush entity: its angles then its origin, in the order and
+ * with the axes the engine uses (yaw about Z, pitch about Y, roll about X).
+ */
+export function mat4FromAngles(
+  angles: readonly [number, number, number],
+  origin: readonly [number, number, number],
+): Mat4 {
+  const [pitch, yaw, roll] = angles;
+  const p = (pitch * Math.PI) / 180;
+  const y = (yaw * Math.PI) / 180;
+  const r = (roll * Math.PI) / 180;
+  const sp = Math.sin(p);
+  const cp = Math.cos(p);
+  const sy = Math.sin(y);
+  const cy = Math.cos(y);
+  const sr = Math.sin(r);
+  const cr = Math.cos(r);
+  const m = new Float32Array(16);
+  // columns: the engine's forward, left and up vectors
+  m[0] = cp * cy;
+  m[1] = cp * sy;
+  m[2] = -sp;
+  m[4] = sr * sp * cy - cr * sy;
+  m[5] = sr * sp * sy + cr * cy;
+  m[6] = sr * cp;
+  m[8] = cr * sp * cy + sr * sy;
+  m[9] = cr * sp * sy - sr * cy;
+  m[10] = cr * cp;
+  m[12] = origin[0];
+  m[13] = origin[1];
+  m[14] = origin[2];
+  m[15] = 1;
+  return m;
+}

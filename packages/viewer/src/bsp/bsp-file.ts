@@ -131,6 +131,17 @@ export interface BspModel {
   faceCount: number;
   /** Triangulated geometry of this model, grouped by material. */
   meshes: BspMeshGroup[];
+  /** The entity that uses this model, for models other than the world. */
+  entity?: BspEntity;
+  /**
+   * Where that entity puts it. The compiler writes a brush entity's geometry
+   * around its origin, so a model with a placement is drawn moved and turned
+   * rather than where its vertices say.
+   */
+  placement?: {
+    origin: [number, number, number];
+    angles: [number, number, number];
+  };
 }
 
 /** The parsed map. */
@@ -548,6 +559,20 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const world = bspModels[0]?.meshes ?? [];
 
   const entities = parseEntitiesText(entitiesText);
+  // A brush model other than the world is placed by the entity that uses it:
+  // the compiler moves the geometry so it sits around the entity's origin.
+  for (const entity of entities) {
+    const model = entity['model'];
+    if (!model?.startsWith('*')) continue;
+    const index = Number(model.slice(1));
+    const target = bspModels[index];
+    if (!target || !Number.isInteger(index)) continue;
+    target.entity = entity;
+    target.placement = {
+      origin: parseVec3(entity['origin']) ?? [0, 0, 0],
+      angles: parseVec3(entity['angles']) ?? [0, 0, 0],
+    };
+  }
   const worldspawn = entities.find((e) => e['classname'] === 'worldspawn');
   const start =
     entities.find((e) => e['classname'] === 'info_player_start') ??

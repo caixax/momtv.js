@@ -51,3 +51,4 @@ export {
   type AssetSource,
 } from './assets.js';
 export { createViewer, type LoadInput, type Viewer, type ViewerOptions } from './viewer.js';
+export { linkBrushEntities, type LinkedEntity } from './entities.js';

@@ -12,7 +12,14 @@
  */
 import type { BspMap } from '../bsp/bsp-file.js';
 import type { LoadedMaterial } from '../materials.js';
-import { mat4LookAtZUp, mat4Multiply, mat4Perspective, type Mat4 } from './math.js';
+import {
+  mat4FromAngles,
+  mat4Identity,
+  mat4LookAtZUp,
+  mat4Multiply,
+  mat4Perspective,
+  type Mat4,
+} from './math.js';
 
 const VS = `#version 300 es
 layout(location=0) in vec3 aPosition;
@@ -20,14 +27,16 @@ layout(location=1) in vec3 aNormal;
 layout(location=2) in vec2 aUv;
 layout(location=3) in vec2 aLightmapUv;
 uniform mat4 uViewProjection;
+uniform mat4 uModel;
 out vec3 vNormal;
 out vec2 vUv;
 out vec2 vLightmapUv;
 void main() {
-  vNormal = aNormal;
+  // The model matrix only ever turns and moves, so normals take it as is.
+  vNormal = mat3(uModel) * aNormal;
   vUv = aUv;
   vLightmapUv = aLightmapUv;
-  gl_Position = uViewProjection * vec4(aPosition, 1.0);
+  gl_Position = uViewProjection * uModel * vec4(aPosition, 1.0);
 }`;
 
 const FS = `#version 300 es
@@ -63,7 +72,12 @@ void main() {
   outColor = vec4(sampled.rgb * light, sampled.a * uAlpha);
 }`;
 
+/** Used where a model has no placement of its own. */
+const IDENTITY = mat4Identity();
+
 interface DrawBatch {
+  /** Brush model this geometry belongs to; 0 is the world. */
+  model: number;
   vao: WebGLVertexArrayObject;
   indexCount: number;
   texture: WebGLTexture | null;
@@ -102,9 +116,14 @@ export class MapRenderer {
     texelScale: WebGLUniformLocation;
     alphaRef: WebGLUniformLocation;
     alpha: WebGLUniformLocation;
+    model: WebGLUniformLocation;
   };
   private batches: DrawBatch[] = [];
   private blended: DrawBatch[] = [];
+  /** Where the map puts each brush model, the world's first. */
+  private placements: Mat4[] = [];
+  /** Where each model is drawn right now, which playback may move. */
+  private transforms: Mat4[] = [];
   private textures: WebGLTexture[] = [];
   private lightmapTexture: WebGLTexture | null = null;
 
@@ -126,6 +145,7 @@ export class MapRenderer {
       texelScale: need('uTexelScale'),
       alphaRef: need('uAlphaRef'),
       alpha: need('uAlpha'),
+      model: need('uModel'),
     };
   }
 
@@ -192,9 +212,16 @@ export class MapRenderer {
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
 
-    // brush entity geometry is already in world coordinates in Momentum maps,
-    // so every model draws at identity
-    for (const model of map.models) {
+    // Each brush model starts where the map puts it; a caller that follows a
+    // replay moves the ones the recorder was watching.
+    this.placements = map.models.map((model) =>
+      model.placement
+        ? mat4FromAngles(model.placement.angles, model.placement.origin)
+        : mat4Identity(),
+    );
+    this.transforms = [...this.placements];
+
+    for (const [modelIndex, model] of map.models.entries()) {
       for (const group of model.meshes) {
         const material = map.materials[group.materialIndex];
         const resolved = glTextures.get(group.materialIndex);
@@ -212,6 +239,7 @@ export class MapRenderer {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, group.indices, gl.STATIC_DRAW);
         gl.bindVertexArray(null);
         const batch: DrawBatch = {
+          model: modelIndex,
           vao,
           indexCount: group.indices.length,
           texture: resolved?.texture ?? null,
@@ -235,6 +263,18 @@ export class MapRenderer {
         (batch.translucent ? this.blended : this.batches).push(batch);
       }
     }
+  }
+
+  /**
+   * Moves a brush model, which is how a replay's moving parts are followed.
+   *
+   * @param model - index into the map's models; 0 is the world
+   * @param transform - where to draw it, or null to put it back where the map
+   * places it
+   */
+  setModelTransform(model: number, transform: Mat4 | null): void {
+    if (model < 0 || model >= this.transforms.length) return;
+    this.transforms[model] = transform ?? (this.placements[model] ?? mat4Identity());
   }
 
   /** Renders one frame. */
@@ -274,6 +314,7 @@ export class MapRenderer {
     gl.activeTexture(gl.TEXTURE0);
 
     const draw = (batch: DrawBatch): void => {
+      gl.uniformMatrix4fv(this.uniforms.model, false, this.transforms[batch.model] ?? IDENTITY);
       gl.uniform3fv(this.uniforms.color, batch.color);
       gl.uniform1i(this.uniforms.hasTexture, batch.texture ? 1 : 0);
       gl.uniform2fv(this.uniforms.texelScale, batch.texelScale);
@@ -292,13 +333,15 @@ export class MapRenderer {
       // Blended surfaces go last, farthest first, and do not write depth, so a
       // pane of glass does not hide what is behind it.
       const [cx, cy, cz] = camera.position;
-      const order = [...this.blended].sort((a, b) => {
-        const da =
-          (a.center[0] - cx) ** 2 + (a.center[1] - cy) ** 2 + (a.center[2] - cz) ** 2;
-        const db =
-          (b.center[0] - cx) ** 2 + (b.center[1] - cy) ** 2 + (b.center[2] - cz) ** 2;
-        return db - da;
-      });
+      const distance = (batch: DrawBatch): number => {
+        const m = this.transforms[batch.model] ?? IDENTITY;
+        const [x, y, z] = batch.center;
+        const wx = m[0]! * x + m[4]! * y + m[8]! * z + m[12]!;
+        const wy = m[1]! * x + m[5]! * y + m[9]! * z + m[13]!;
+        const wz = m[2]! * x + m[6]! * y + m[10]! * z + m[14]!;
+        return (wx - cx) ** 2 + (wy - cy) ** 2 + (wz - cz) ** 2;
+      };
+      const order = [...this.blended].sort((a, b) => distance(b) - distance(a));
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
@@ -318,6 +361,8 @@ export class MapRenderer {
     if (this.lightmapTexture) this.gl.deleteTexture(this.lightmapTexture);
     this.batches = [];
     this.blended = [];
+    this.placements = [];
+    this.transforms = [];
     this.textures = [];
     this.lightmapTexture = null;
   }

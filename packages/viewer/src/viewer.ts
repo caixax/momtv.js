@@ -1,6 +1,8 @@
-import { parseReplay, type MtvReplay, type PlayerState } from '@caixax/mtv';
+import { entityStateAt, parseReplay, type MtvReplay, type PlayerState } from '@caixax/mtv';
 import { parseBsp, type BspMap } from './bsp/bsp-file.js';
+import { linkBrushEntities, type LinkedEntity } from './entities.js';
 import { MapRenderer } from './gl/map-renderer.js';
+import { mat4FromAngles } from './gl/math.js';
 import { loadMaterials, type LoadMaterialsOptions } from './materials.js';
 import { resolveMap, type ResolveMapOptions } from './map-resolver.js';
 import {
@@ -74,7 +76,31 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
   let raf = 0;
   let lastTime = 0;
   let destroyed = false;
+  /** The map's moving parts, paired with what the replay recorded. */
+  let moving: LinkedEntity[] = [];
+  let movedTick = -1;
   const tickListeners = new Set<(state: PlayerState) => void>();
+
+  /** Puts every recorded brush entity where it was on a tick. */
+  const placeEntities = (tick: number): void => {
+    if (moving.length === 0 || tick === movedTick) return;
+    movedTick = tick;
+    for (const link of moving) {
+      const state = entityStateAt(link.track, tick);
+      // Whatever the replay never sent stays where the map puts it.
+      const origin: [number, number, number] = [
+        Number.isNaN(state.origin[0]) ? link.origin[0] : state.origin[0],
+        Number.isNaN(state.origin[1]) ? link.origin[1] : state.origin[1],
+        Number.isNaN(state.origin[2]) ? link.origin[2] : state.origin[2],
+      ];
+      const angles: [number, number, number] = [
+        Number.isNaN(state.angles[0]) ? link.angles[0] : state.angles[0],
+        Number.isNaN(state.angles[1]) ? link.angles[1] : state.angles[1],
+        Number.isNaN(state.angles[2]) ? link.angles[2] : state.angles[2],
+      ];
+      renderer.setModelTransform(link.model, mat4FromAngles(angles, origin));
+    }
+  };
 
   // free camera state
   const free = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0 };
@@ -105,6 +131,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
     lastTime = now;
     if (!clock) return;
     const state = clock.advance(dt);
+    placeEntities(state.tick);
     for (const fn of tickListeners) fn(state);
 
     // free camera movement
@@ -177,6 +204,10 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
       map = parseBsp(mapBytes);
       const materials = options.noTextures ? undefined : await loadMaterials(map, options);
       renderer.upload(map, materials);
+      // The map's moving parts: traps, doors, platforms, as the replay saw them.
+      moving = linkBrushEntities(map, replay.toEntityTracks());
+      movedTick = -1;
+      placeEntities(0);
       clock = new PlaybackClock(replay);
       const start = replay.getPlayerState(0);
       free.x = start.origin[0];
