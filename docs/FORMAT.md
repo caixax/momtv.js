@@ -355,7 +355,7 @@ A VMT is a keyvalues block whose outer key is the shader. What the renderer take
 
 VTF versions 7.0 to 7.6 appear in Momentum's files. From 7.3 the header is followed by a directory of resources, each a three byte tag, a flag byte and an offset: tag 0x01 is the thumbnail, 0x30 the image data, and the image data is wherever the directory says rather than straight after the header.
 
-Strata Source's 7.6 adds the resource `AXC`, an auxiliary compression table: a size, a word holding the compressor's level and method, and then one 32 bit compressed size per chunk, in storage order (smallest mip level first, then frame, then face). Every chunk is compressed on its own, and in the current build the compressor is Zstandard, so the viewer carries its own Zstandard decoder. Most of the game's own textures are stored this way: of the HL2 archive's 6748 textures, every one is version 7.6 with Zstandard chunks, and they decode to DXT1, DXT5 and the uncompressed formats. Model textures also use image format 70, which is BC7 at one byte per pixel; the viewer sizes it but does not decode it yet.
+Strata Source's 7.6 adds the resource `AXC`, an auxiliary compression table: a size, a word holding the compressor's level and method, and then one 32 bit compressed size per chunk, in storage order (smallest mip level first, then frame, then face). Every chunk is compressed on its own, and in the current build the compressor is Zstandard, so the viewer carries its own Zstandard decoder. Most of the game's own textures are stored this way: of the HL2 archive's 6748 textures, every one is version 7.6 with Zstandard chunks, and they decode to DXT1, DXT5 and the uncompressed formats. Model textures and several skies use image format 70, which is BC7 at one byte per pixel, and the viewer decodes it.
 
 ### Maps
 
@@ -367,3 +367,27 @@ Momentum's maps are VBSP 19 to 25. Version 25, which Strata Source writes, widen
 | EDGES | version 0, two 16 bit vertex indices | version 1, two 32 bit ones |
 
 The lump sizes confirm it: in `df_cruton` the faces lump holds 1004472 bytes, which is 13951 faces of 72 bytes, and every face's plane, edge, texinfo, lightmap and original face field lands in range with that layout. TEXINFO, TEXDATA, PLANES, MODELS, VERTEXES and SURFEDGES are unchanged.
+
+### Displacements
+
+A displacement replaces the flat quad of its face with a grid of (2^power + 1) points a side, each pushed along its own direction by its own distance. The record names the vertex it starts from, and the grid begins at whichever corner of the face lies nearest that start position, running row by row from there. Built the other way round the patches come apart: of the 5698 border points `bhop_badwater` shares between neighbouring patches, 3 percent fail to meet with the right order and 78 percent with the transposed one.
+
+Strata Source widened the record from 176 to 232 bytes. Rather than keying that off a version, the reader takes whichever stride makes the records account for exactly the vertices the map carries, which also catches a lump it has misread. Texture and lightmap coordinates come from the flat quad underneath, not from the pushed points.
+
+### Brush entities
+
+The compiler writes a brush entity's geometry around its own origin and leaves the placing to the entity, so a model is drawn at `origin` turned by `angles` rather than where its vertices say. It is the common case, not a rare one: `agtricks` places 36 of its models this way, `bhop_badwater` 26, `df_waluigi_pinball` 86 and `deathrun_unique` all 132. Of the maps checked, not one has a brush entity whose geometry is already in world coordinates while carrying a non zero origin.
+
+### Static props
+
+The game lump `sprp` names every model the map uses, 128 bytes a path, then a list of leaves, then the placements. The record grew over the years, so its stride is taken from the lump: the count is written down and the records fill what is left. Version 10 is 72 bytes; Strata Source's version 13 is 88 and ends with a scale per axis, and its leaf list is 32 bits an entry rather than 16, which is settled by trying both and keeping the one whose records come out whole.
+
+A model is three files that have to agree: the `.mdl` carries the materials and the directories to look them up in, the `.vvd` the vertices (48 bytes each, with a fixup table to apply when it has one), and the `.vtx` the triangles, as strips or as lists, with the vertices of each strip group pointing back into the model's own. All three carry the same checksum, which is how a mismatched set is caught.
+
+### Sky
+
+A map names its sky and the game keeps six images for it: `rt`, `lf`, `bk`, `ft`, `up` and `dn`. Which image faces which way is written down nowhere, so it was measured two ways.
+
+The seams settle the order: the four sides join right, front, left, back going clockwise, which scores a seam error of 5 against 33 for the other arrangement on `agtricks` and 6 against 64 on `ab_baume`, and the top image joins them with its bottom edge running along their top edges.
+
+The heading comes from the maps: a map's `light_environment` records which way its sunlight travels, so the sun sits opposite. Putting `rt` along +X lands the brightest part of the sky within a few degrees of that direction on four maps out of five (6, 11, 24 and 41 degrees), against 83 to 135 degrees off for the three other headings.
