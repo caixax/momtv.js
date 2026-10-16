@@ -60,6 +60,8 @@ export interface Viewer {
   setCamera(mode: CameraMode): void;
   /** Turns one layer of the scene on or off, without loading anything again. */
   setLayer(layer: 'props' | 'sky', visible: boolean): void;
+  /** Changes the field of view, in degrees. */
+  setFov(degrees: number): void;
   /** What the loaded map put on screen. */
   readonly counts: { props: number; propBatches: number; movingParts: number };
   /** Subscribes to per-frame player state updates. Returns an unsubscriber. */
@@ -100,6 +102,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
   let moving: LinkedEntity[] = [];
   let movedTick = -1;
   const layers = { props: true, sky: true };
+  let fov = options.fov ?? 90;
   const tickListeners = new Set<(state: PlayerState) => void>();
 
   /** Puts every recorded brush entity where it was on a tick. */
@@ -189,7 +192,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
         : cameraMode === 'thirdperson'
           ? poseToCamera(thirdPersonCamera(state))
           : poseToCamera(firstPersonCamera(state));
-    const shot = { ...cam, fovYDegrees: options.fov ?? 90 };
+    const shot = { ...cam, fovYDegrees: fov };
     if (layers.sky) sky.render(shot);
     renderer.render(shot);
     if (layers.props) props.render(shot);
@@ -279,6 +282,9 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
     },
     setLayer(layer, visible) {
       layers[layer] = visible;
+    },
+    setFov(degrees) {
+      fov = Math.max(10, Math.min(170, degrees));
     },
     get counts() {
       return {

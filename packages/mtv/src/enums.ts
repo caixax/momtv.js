@@ -84,3 +84,33 @@ export enum ReplayCompression {
   None = 0,
   Lzma = 1,
 }
+
+/**
+ * Button bits of `m_nPhysicalButtons`, as the engine numbers them.
+ *
+ * Confirmed against recorded runs: in a bhop replay the jump bit is held or
+ * tapped on 98 percent of ticks and the two strafe bits alternate at close to
+ * half each, which is what bunny hopping looks like.
+ */
+export enum Button {
+  Attack = 1 << 0,
+  Jump = 1 << 1,
+  Duck = 1 << 2,
+  Forward = 1 << 3,
+  Back = 1 << 4,
+  Use = 1 << 5,
+  Cancel = 1 << 6,
+  Left = 1 << 7,
+  Right = 1 << 8,
+  MoveLeft = 1 << 9,
+  MoveRight = 1 << 10,
+  Attack2 = 1 << 11,
+  Run = 1 << 12,
+  Reload = 1 << 13,
+  Alt1 = 1 << 14,
+  Alt2 = 1 << 15,
+  Score = 1 << 16,
+  Speed = 1 << 17,
+  Walk = 1 << 18,
+  Zoom = 1 << 19,
+}

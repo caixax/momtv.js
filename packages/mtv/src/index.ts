@@ -8,6 +8,7 @@
 
 export { MtvError, type MtvErrorCode } from './error.js';
 export {
+  Button,
   Gamemode,
   GamemodeName,
   ReplayCompression,
