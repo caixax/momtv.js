@@ -9,6 +9,7 @@ import {
 } from './player-track.js';
 import { readSplits, type RunSplits } from './splits.js';
 import { toBytes } from './byte-reader.js';
+import { decodeEntityTracks, type EntityTrack } from './entity-track.js';
 
 /**
  * A fully parsed replay. Create one with {@link parseReplay}.
@@ -25,6 +26,7 @@ export class MtvReplay {
   readonly body: ReplayBody;
 
   private track_: PlayerTrack | undefined;
+  private entities_: EntityTrack[] | undefined;
 
   /** @internal use {@link parseReplay} */
   constructor(header: ReplayHeader, splits: RunSplits, body: ReplayBody) {
@@ -70,6 +72,32 @@ export class MtvReplay {
   /** The player state at a tick (clamped to the recorded range). */
   getPlayerState(tick: number): PlayerState {
     return trackStateAt(this.toTrack(), tick);
+  }
+
+  /**
+   * The recorded entities other than the player: a map's moving parts, as the
+   * recorder saw them. Decoded on first access and cached.
+   *
+   * Only revision 2 bodies are walked frame by frame, so older replays return
+   * nothing rather than a guess.
+   */
+  toEntityTracks(): EntityTrack[] {
+    if (this.entities_) return this.entities_;
+    if (this.body.revision !== 2) {
+      this.entities_ = [];
+      return this.entities_;
+    }
+    try {
+      this.entities_ = decodeEntityTracks(
+        this.body,
+        this.header.frameCount,
+        this.header.propBits,
+      ).tracks;
+    } catch {
+      // A body this parser cannot walk simply has no moving parts to show.
+      this.entities_ = [];
+    }
+    return this.entities_;
   }
 
   /**

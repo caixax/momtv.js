@@ -60,6 +60,15 @@ export {
   type Frame,
   type FrameReaderOptions,
 } from './frame-reader.js';
+export { walkFrames } from './frame-walk.js';
+export {
+  decodeEntityTracks,
+  entityStateAt,
+  ENTITY_STRIDE,
+  type EntityState,
+  type EntityTrack,
+  type EntityTracks,
+} from './entity-track.js';
 export {
   readPropValue,
   resolveClassProps,

@@ -53,6 +53,12 @@ interface SlotState {
   propNames: readonly string[];
 }
 
+/** An entity the walk knows about: what it is, and where it came from. */
+export interface SlotEntity {
+  className: string;
+  baseline: number;
+}
+
 /** One decoded property of one entity. */
 export interface DecodedProp {
   /** Property name as the replay's class table spells it. */
@@ -60,6 +66,18 @@ export interface DecodedProp {
   /** Element index, for a property that is an array. */
   element?: number;
   value: PropValue;
+}
+
+/** An entity the recorder started following. */
+export interface CreatedEntity {
+  slot: number;
+  className: string;
+  /**
+   * Baseline the entity takes its state from, which is also what identifies
+   * it: an entity that leaves and comes back points at the same baseline, in
+   * a slot the recorder is free to pick again.
+   */
+  baseline: number;
 }
 
 /** What one frame did to one entity. */
@@ -77,8 +95,8 @@ export interface Frame {
   endBit: number;
   /** The leading flag, whose meaning is not yet established. */
   flag: number;
-  /** Slots that started being recorded this tick. */
-  created: number[];
+  /** Entities that started being recorded this tick. */
+  created: CreatedEntity[];
   /** Slots that stopped being recorded this tick. */
   removed: number[];
   updates: EntityUpdate[];
@@ -105,6 +123,8 @@ export class FrameReader {
   /** Class of each baseline, which is what a creation record points at. */
   private readonly baselineClass = new Map<number, string>();
   private readonly slots = new Map<number, SlotState>();
+  /** Baseline each slot was created from, which identifies the entity. */
+  private readonly slotBaseline = new Map<number, number>();
   private readonly propBits: number;
   private readonly wanted: (className: string, propName: string) => boolean;
 
@@ -139,6 +159,15 @@ export class FrameReader {
     this.reader.bitPos = this.baseBit + bit;
   }
 
+  /** What each slot holds right now, as the walk has learnt it. */
+  slotEntities(): Map<number, SlotEntity> {
+    const out = new Map<number, SlotEntity>();
+    for (const [slot, state] of this.slots) {
+      out.set(slot, { className: state.className, baseline: this.slotBaseline.get(slot) ?? -1 });
+    }
+    return out;
+  }
+
   /** Records that a slot holds a class, by name. */
   setSlotClass(slot: number, className: string): void {
     this.slots.set(slot, this.stateFor(className));
@@ -167,7 +196,10 @@ export class FrameReader {
       const slot = r.readVarInt32();
       r.readVarInt32();
       const name = this.baselineClass.get(baseline);
-      if (name) this.slots.set(slot, this.stateFor(name));
+      if (name) {
+        this.slots.set(slot, this.stateFor(name));
+        this.slotBaseline.set(slot, baseline);
+      }
     }
   }
 
@@ -202,7 +234,7 @@ export class FrameReader {
     const startBit = this.bitPos;
     const flag = r.readBit();
 
-    const created: number[] = [];
+    const created: CreatedEntity[] = [];
     if (r.readBit()) {
       const count = r.readUBitVar();
       if (count > MAX_CREATIONS) {
@@ -215,7 +247,8 @@ export class FrameReader {
         const name = this.baselineClass.get(baseline);
         if (!name) throw new MtvError('BAD_BODY', `a creation names baseline ${baseline}`);
         this.slots.set(slot, this.stateFor(name));
-        created.push(slot);
+        this.slotBaseline.set(slot, baseline);
+        created.push({ slot, className: name, baseline });
       }
     }
 
@@ -242,6 +275,7 @@ export class FrameReader {
       for (let i = 0; i < count; i++) {
         const slot = r.readUBitVar();
         this.slots.delete(slot);
+        this.slotBaseline.delete(slot);
         removed.push(slot);
       }
     }
