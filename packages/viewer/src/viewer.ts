@@ -2,8 +2,10 @@ import { entityStateAt, parseReplay, type MtvReplay, type PlayerState } from '@c
 import { parseBsp, type BspMap } from './bsp/bsp-file.js';
 import { linkBrushEntities, type LinkedEntity } from './entities.js';
 import { MapRenderer } from './gl/map-renderer.js';
+import { PropRenderer } from './gl/prop-renderer.js';
 import { mat4FromAngles } from './gl/math.js';
-import { loadMaterials, type LoadMaterialsOptions } from './materials.js';
+import { loadStaticProps, type LoadPropsOptions } from './props.js';
+import { createMaterialResolver, loadMaterials, type LoadMaterialsOptions } from './materials.js';
 import { resolveMap, type ResolveMapOptions } from './map-resolver.js';
 import {
   firstPersonCamera,
@@ -18,6 +20,8 @@ export interface ViewerOptions extends ResolveMapOptions, LoadMaterialsOptions {
   fov?: number;
   /** Skip texture loading and render flat material colours. */
   noTextures?: boolean;
+  /** Skip the map's static props. */
+  noProps?: boolean;
 }
 
 /** What to load: a replay with an optional explicit map. */
@@ -68,6 +72,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
   const gl = canvas.getContext('webgl2', { antialias: true });
   if (!gl) throw new Error('WebGL2 is required');
   const renderer = new MapRenderer(gl);
+  const props = new PropRenderer(gl);
 
   let replay: MtvReplay | null = null;
   let map: BspMap | null = null;
@@ -168,7 +173,9 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
         : cameraMode === 'thirdperson'
           ? poseToCamera(thirdPersonCamera(state))
           : poseToCamera(firstPersonCamera(state));
-    renderer.render({ ...cam, fovYDegrees: options.fov ?? 90 });
+    const shot = { ...cam, fovYDegrees: options.fov ?? 90 };
+    renderer.render(shot);
+    props.render(shot);
   };
 
   const poseToCamera = (pose: {
@@ -202,8 +209,14 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
         mapBytes = resolved.data;
       }
       map = parseBsp(mapBytes);
+      const resolver = await createMaterialResolver(map, options);
       const materials = options.noTextures ? undefined : await loadMaterials(map, options);
       renderer.upload(map, materials);
+      if (!options.noProps && !options.noTextures) {
+        const propOptions: LoadPropsOptions = {};
+        if (options.onMissing) propOptions.onMissing = options.onMissing;
+        props.upload(await loadStaticProps(map, resolver, propOptions));
+      }
       // The map's moving parts: traps, doors, platforms, as the replay saw them.
       moving = linkBrushEntities(map, replay.toEntityTracks());
       movedTick = -1;
@@ -245,6 +258,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
       window.removeEventListener('keydown', keyDown);
       window.removeEventListener('keyup', keyUp);
       renderer.dispose();
+      props.dispose();
     },
   };
 }

@@ -30,6 +30,7 @@ function mapWith(models: BspModel[]): BspMap {
     world: [],
     models,
     pakfile: new Uint8Array(0),
+    staticProps: [],
     lightmap: undefined,
     skyName: undefined,
     playerStart: undefined,

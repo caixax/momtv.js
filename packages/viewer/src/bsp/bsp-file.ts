@@ -9,6 +9,7 @@
  * both shapes are read.
  */
 import { lzmaDecompress, VALVE_LZMA_ID } from '@caixax/mtv';
+import { readStaticProps, type StaticProp } from './static-props.js';
 
 /** Lump indices used by the parser. */
 const LUMP = {
@@ -167,6 +168,8 @@ export interface BspMap {
   pakfile: Uint8Array;
   /** Baked lighting atlas, when the map has a lighting lump. */
   lightmap: Lightmap | undefined;
+  /** Props the map places, with the model each one uses. */
+  staticProps: StaticProp[];
   /** worldspawn's skyname, if present. */
   skyName: string | undefined;
   /** info_player_start origin, if present. */
@@ -417,6 +420,8 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const planes = readLump(file, LUMP.PLANES);
   const models = readLump(file, LUMP.MODELS);
   const pakfile = readLump(file, LUMP.PAKFILE);
+  // The game lump's entries point into the file itself, so it is read whole.
+  const gameLump = readLump(file, LUMP.GAME_LUMP);
   // terrain: a displacement turns one flat quad into a grid of offset points
   const dispInfo = readLump(file, LUMP.DISPINFO);
   const dispVerts = readLump(file, LUMP.DISP_VERTS);
@@ -767,6 +772,13 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
       angles: parseVec3(entity['angles']) ?? [0, 0, 0],
     };
   }
+  let staticProps: StaticProp[] = [];
+  try {
+    staticProps = readStaticProps(gameLump, bytes)?.props ?? [];
+  } catch {
+    // A game lump this cannot read costs the props, not the map.
+  }
+
   const worldspawn = entities.find((e) => e['classname'] === 'worldspawn');
   const start =
     entities.find((e) => e['classname'] === 'info_player_start') ??
@@ -781,6 +793,7 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
     world,
     models: bspModels,
     pakfile,
+    staticProps,
     lightmap: lightmapAtlas,
     skyName: worldspawn?.['skyname'],
     playerStart: parseVec3(start?.['origin']),

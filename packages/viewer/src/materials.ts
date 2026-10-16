@@ -62,6 +62,31 @@ export async function loadMaterials(
   map: BspMap,
   options: LoadMaterialsOptions = {},
 ): Promise<LoadedMaterial[]> {
+  const resolver = await createMaterialResolver(map, options);
+  return loadMapMaterials(map, resolver, options);
+}
+
+/** Resolves materials by name, remembering what it has already read. */
+export interface MaterialResolver {
+  /** Where the files come from, in the order they are searched. */
+  readonly assets: AssetSource;
+  /**
+   * Resolves one material.
+   *
+   * @param name - path under `materials/`, without the extension
+   * @param fallbackColour - what to paint the surface when nothing is found
+   */
+  resolve(name: string, fallbackColour?: [number, number, number]): Promise<LoadedMaterial>;
+}
+
+/**
+ * Opens the places a map's materials can come from and returns a resolver
+ * over them, so the map and its props share one set of caches.
+ */
+export async function createMaterialResolver(
+  map: BspMap,
+  options: LoadMaterialsOptions = {},
+): Promise<MaterialResolver> {
   const fetchImpl = options.fetch ?? (typeof fetch === 'function' ? fetch : undefined);
   const sources: AssetSource[] = [pakfileSource(map.pakfile)];
   if (options.assetSources) sources.push(...options.assetSources);
@@ -110,6 +135,61 @@ export async function loadMaterials(
     return decoded;
   };
 
+  const resolved = new Map<string, Promise<LoadedMaterial>>();
+  const resolveOne = async (
+    name: string,
+    colour: [number, number, number],
+  ): Promise<LoadedMaterial> => {
+    const loaded: LoadedMaterial = {
+      name,
+      texture: undefined,
+      color: colour,
+      drawn: !isToolMaterial(name),
+      alphaTest: false,
+      alphaTestReference: 0.5,
+      translucent: false,
+      alpha: 1,
+    };
+    if (!loaded.drawn) return loaded;
+    const vmt = await readVmt(name).catch(() => undefined);
+    if (vmt) {
+      loaded.alphaTest = vmt.alphaTest;
+      loaded.alphaTestReference = vmt.alphaTestReference;
+      loaded.translucent = vmt.translucent;
+      loaded.alpha = vmt.alpha;
+      if (vmt.invisible) loaded.drawn = false;
+    }
+    if (!loaded.drawn) return loaded;
+    // A material without a definition still often has a texture of the same
+    // name, which is how many map textures are shipped.
+    loaded.texture = await readTexture(vmt?.baseTexture ?? name).catch(() => undefined);
+    if (!loaded.texture && vmt?.baseTexture && vmt.baseTexture !== name) {
+      loaded.texture = await readTexture(name).catch(() => undefined);
+    }
+    if (!loaded.texture) options.onMissing?.(name);
+    return loaded;
+  };
+
+  return {
+    assets,
+    resolve(name, fallbackColour) {
+      const key = name.replace(/\\/g, '/').toLowerCase();
+      let pending = resolved.get(key);
+      if (!pending) {
+        pending = resolveOne(key, fallbackColour ?? [0.6, 0.6, 0.6]);
+        resolved.set(key, pending);
+      }
+      return pending;
+    },
+  };
+}
+
+/** Resolves every material a map's surfaces use. */
+async function loadMapMaterials(
+  map: BspMap,
+  resolver: MaterialResolver,
+  options: LoadMaterialsOptions,
+): Promise<LoadedMaterial[]> {
   const out: LoadedMaterial[] = new Array(map.materials.length);
   let done = 0;
   let next = 0;
@@ -118,42 +198,13 @@ export async function loadMaterials(
       const index = next++;
       const material = map.materials[index];
       if (!material) return;
-      const name = material.name.replace(/\\/g, '/').toLowerCase();
-      const color: [number, number, number] = [
+      // the map's own average colour, for a material that resolves to nothing
+      const colour: [number, number, number] = [
         Math.min(1, Math.abs(material.reflectivity[0])),
         Math.min(1, Math.abs(material.reflectivity[1])),
         Math.min(1, Math.abs(material.reflectivity[2])),
       ];
-      const loaded: LoadedMaterial = {
-        name: material.name,
-        texture: undefined,
-        color,
-        drawn: !isToolMaterial(name),
-        alphaTest: false,
-        alphaTestReference: 0.5,
-        translucent: false,
-        alpha: 1,
-      };
-      if (loaded.drawn) {
-        const vmt = await readVmt(name).catch(() => undefined);
-        if (vmt) {
-          loaded.alphaTest = vmt.alphaTest;
-          loaded.alphaTestReference = vmt.alphaTestReference;
-          loaded.translucent = vmt.translucent;
-          loaded.alpha = vmt.alpha;
-          if (vmt.invisible) loaded.drawn = false;
-        }
-        if (loaded.drawn) {
-          // A material without a definition still often has a texture of the
-          // same name, which is how many map textures are shipped.
-          loaded.texture = await readTexture(vmt?.baseTexture ?? name).catch(() => undefined);
-          if (!loaded.texture && vmt?.baseTexture && vmt.baseTexture !== name) {
-            loaded.texture = await readTexture(name).catch(() => undefined);
-          }
-          if (!loaded.texture) options.onMissing?.(material.name);
-        }
-      }
-      out[index] = loaded;
+      out[index] = await resolver.resolve(material.name, colour);
       options.onProgress?.(++done, map.materials.length);
     }
   };

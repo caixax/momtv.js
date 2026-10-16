@@ -96,6 +96,7 @@ export function mat4Translation(x: number, y: number, z: number): Mat4 {
 export function mat4FromAngles(
   angles: readonly [number, number, number],
   origin: readonly [number, number, number],
+  scale: readonly [number, number, number] = [1, 1, 1],
 ): Mat4 {
   const [pitch, yaw, roll] = angles;
   const p = (pitch * Math.PI) / 180;
@@ -108,16 +109,16 @@ export function mat4FromAngles(
   const sr = Math.sin(r);
   const cr = Math.cos(r);
   const m = new Float32Array(16);
-  // columns: the engine's forward, left and up vectors
-  m[0] = cp * cy;
-  m[1] = cp * sy;
-  m[2] = -sp;
-  m[4] = sr * sp * cy - cr * sy;
-  m[5] = sr * sp * sy + cr * cy;
-  m[6] = sr * cp;
-  m[8] = cr * sp * cy + sr * sy;
-  m[9] = cr * sp * sy - sr * cy;
-  m[10] = cr * cp;
+  // columns: the engine's forward, left and up vectors, each scaled
+  m[0] = cp * cy * scale[0];
+  m[1] = cp * sy * scale[0];
+  m[2] = -sp * scale[0];
+  m[4] = (sr * sp * cy - cr * sy) * scale[1];
+  m[5] = (sr * sp * sy + cr * cy) * scale[1];
+  m[6] = sr * cp * scale[1];
+  m[8] = (cr * sp * cy + sr * sy) * scale[2];
+  m[9] = (cr * sp * sy - sr * cy) * scale[2];
+  m[10] = cr * cp * scale[2];
   m[12] = origin[0];
   m[13] = origin[1];
   m[14] = origin[2];
