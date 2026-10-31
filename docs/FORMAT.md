@@ -9,7 +9,7 @@ Every field is annotated with a confidence level:
 - **[hypothesis]**: plausible interpretation, needs more samples or game knowledge to confirm.
 - **[unknown]**: structure or meaning not yet understood.
 
-Primary sources: the official header/splits reader in momentum-mod/website (`libs/formats/replay`, MIT), the official sample replay (bhop_eazy), and byte and bit level analysis of that sample. Everything below the splits block was reverse engineered from data; nothing here is derived from game code.
+Primary sources: the official header/splits reader in momentum-mod/website (`libs/formats/replay`, MIT), the sample replays, and the game's own binaries: the replay loader and playback in `engine.dll` and the network tables in `server.dll`, read with Ghidra. Only the format is written down here; no game code is copied into this repository.
 
 ## File layout
 
@@ -26,12 +26,12 @@ All integers little endian. The C++ struct is packed (`#pragma pack(1)`).
 | Offset | Type     | Field             | Notes                                     |
 | ------ | -------- | ----------------- | ----------------------------------------- |
 | 0      | int32    | magic             | `'MMTV'` = 0x56544D4D                     |
-| 4      | int32    | formatVersion     | 2                                         |
+| 4      | int32    | formatVersion     | 2 (1 for older files, see below)          |
 | 8      | int64    | timestamp         | Unix ms when the file was written         |
 | 16     | char[64] | mapName           | NUL terminated                            |
 | 80     | char[41] | mapHash           | SHA1 hex of the BSP                       |
 | 121    | uint8    | gamemode          | see Gamemode enum                         |
-| 122    | uint8    | compression       | 0 = none, 1 = Valve LZMA                  |
+| 122    | uint8    | compression       | 0 = none, 1 = Valve LZMA, 2 = Zstandard   |
 | 123    | float    | tickInterval      | seconds per tick                          |
 | 127    | uint64   | playerSteamID     | SteamID64                                 |
 | 135    | char[32] | playerName        | NUL terminated                            |
@@ -49,6 +49,8 @@ All integers little endian. The C++ struct is packed (`#pragma pack(1)`).
 | 194    | uint8    | style             | see Style enum                            |
 
 The official reader stops at `style` and leaves the counter fields commented out; their meaning here was confirmed by using them to parse the body (every counter matches the decoded structure exactly). [verified]
+
+Format version 1 is the same struct without its last byte: the engine copies 194 bytes and sets `style` to 0. Everything after the header is laid out the same way, the splits starting at 194 instead of 195. [verified against the engine's header reader]
 
 ## Run splits [verified]
 
@@ -68,18 +70,23 @@ Immediately after the splits: Valve `lzma_header_t` framing:
 
 The sample decompresses to exactly `actualSize` = 156756 bytes. [verified]
 
+With compression 2 the body is a single Zstandard frame with no wrapper around it, starting right after the splits (magic `0xFD2FB528`). The engine sizes the output from the frame header and decompresses it with libzstd. [verified]
+
 ## Decompressed body
 
 Sections in order:
 
 1. Event timeline
 2. Networked class table
-3. Sound table
-4. Game event definitions (protobuf)
-5. Baselines (byte size prefixed)
-6. Keyframe index
-7. Keyframe data (byte size prefixed)
-8. Frame data (byte size prefixed)
+3. Temp entity class table (`tempEntClassCount` records of `{uint8 classId}{NUL terminated name}`, for example `CTEWorldDecal`; empty in most replays, which is why it went unnoticed)
+4. Sound table
+5. Game event definitions (protobuf)
+6. Baselines (byte size prefixed)
+7. Keyframe index
+8. Keyframe data (byte size prefixed)
+9. Frame data (byte size prefixed)
+
+(Revision 2 swaps 5 and 6, see below.)
 
 ### Bit stream conventions [verified]
 
@@ -117,9 +124,9 @@ In the sample the final record's `time` equals the header `runTime` exactly, and
 
 Property order in this table defines the property index used in all bit-packed entity data. Property value encodings are not stored; they are implied by the game's network tables (see "Property encodings").
 
-### 3. Sound table [strong]
+### 3. Sound table [verified for revision 2]
 
-`sampleCount` records, each `uint16 soundIndex` + NUL terminated path.
+`sampleCount` records. Revision 2 writes each as a NUL terminated sound name alone, the engine's prefix characters kept (`)weapons/mom_rocketlauncher/...wav`, `)` being spatial stereo). Revision 1 was read as `uint16 soundIndex` + NUL terminated path. [strong]
 
 ### 4. Game event definitions [verified]
 
@@ -226,17 +233,19 @@ About 3.7% of ticks carry a 4-byte frame: header 1, entity 0, flags `(0,1)` and 
 
 Replays written by current 0.10.x playtest builds keep formatVersion 2 in the header but revise the body layout. A parser distinguishes the revisions structurally (revision 1 parses to the exact body end or it is revision 2). Differences:
 
-- Timeline: `uint16 count`, then compact records `{int32 tick}{uint8 flag}` with two extra bytes `{uint8 track}{uint8 major}` when flag is 2 (checkpoint enter). Flags observed: 3 run start, 0 unknown, 2 checkpoint, 1 final tick. No run-timer double anymore.
+- Timeline: `uint16 count`, then compact records `{int32 tick}{uint8 type}` with two extra bytes `{uint8 track}{uint8 major}` when the type is 2. The engine's reader stores the tick of a type 0 as where the timer starts, reads a track and a stage after a type 2, accepts 1 and 3 bare and rejects anything else. Type 0 is the timer start, 1 the finish (always the last tick), 2 a stage reached, 3 the start zone entered. No run-timer double anymore: the time of an event is `(tick - start) * tickInterval` plus where inside its tick the start was crossed, which the header's `runTime` against the finish tick says (between 0 and one tick). With that, the finish lands on `runTime` in every one of 371 replays. [verified]
 - The player class now has 49 properties (propBits 7 would overflow 6 bits; the header says 6 and frames use 6-bit property indices). New properties include wishVel, moveStatus, acceleration, maxspeed, friction, several EndTick fields, m_flGroundPositionZ, m_iLandTick/m_iJumpTick, m_hActiveWeapon and m_hPrimaryTimer; widths confirmed against the game's own class table dump.
 - The baselines and the game event definitions swap places: the section after the sound table is the baselines, then the game events. A parser that keeps the revision 1 order reads the baseline bytes as the game event blob and then reads the game event size as the baseline size, which is usually zero, so it sees no baselines at all even though the header counts them. Fixing the order recovers all of them (33 in the agtricks sample, 40 in a deathrun one).
 - A baseline's entity field is a small index, not an edict: it is what a frame's creation records point at, and it carries the class and the initial state of the entity that takes it.
-- Keyframe index: the tick 0 entry is implicit (8 zero bytes, no frame offset), followed by keyFrameCount - 1 full 12 byte entries with the same {tick, keyframeOffset, frameOffset} layout as revision 1.
+- Keyframe index: the tick 0 entry is implicit (8 zero bytes, no frame offset), followed by keyFrameCount - 1 full 12 byte entries with the same {tick, keyframeOffset, frameOffset} layout as revision 1. A seek finds the last keyframe at or before the tick, reads it with the frame routine from `keyframeOffset`, then continues the frames from `frameOffset`.
 - Frames keep the same container ({6-bit block count}{entity blocks}, player first) but each block now writes all property indices first and then the values in that order (classic Source field list), instead of interleaving index and value.
 - Frame data may start with a prologue before the first frame in some gamemodes (observed in defrag and deathrun replays); the frame walker skips it.
 
 Oracle note: on maps with push physics (boosters, bumpers, conveyors) the recorded m_vecVelocity legitimately disagrees with per-tick position deltas while the push is acting, since base velocity is not part of the recorded property set. Plain bhop runs validate at over 99%.
 
 ## Frame location and its limits [verified by measurement]
+
+Superseded for revision 2, whose frames are now read exactly (see "How exact the walk is"); this is how revision 1 bodies are still located, and how the walk worked before every block could be decoded.
 
 Only the leading player block of a frame is decoded; the trailing entity blocks (viewmodel, weapons, zones, map entities) are not mapped, so a frame's true end is unknown and the next frame has to be located rather than computed.
 
@@ -278,12 +287,18 @@ A keyframe and a frame are the same thing: the engine reads both with one routin
 A property payload is:
 
 - a UBitVar count of references
-- that many references, each a property index of `propBits` bits, followed by a 6 bit element index when the property is an array
-- the values, in the same order as the references, each read with its property's encoding (an array reference reads one element, not the whole array)
+- that many references, each a property index of `propBits` bits, followed by an element index when the property is an array (see below)
+- the values, in the same order as the references, each read the way the property's recording mode says (see "Recording modes"); an array reference reads one element, not the whole array
 
 The references are not sorted: a frame lists the properties in the order the recorder noticed them changing.
 
-Entities that only start being recorded this tick contribute nothing beyond their creation record. Their state comes from their baseline, which is why a creation names one.
+How an element is named depends on what the replay's property is to the engine, which matches each name in the replay against the server class's flattened properties:
+
+- one network Array property (`m_hViewModel`): the index takes just enough bits to count the elements, `floor(log2(n)) + 1` for n elements (2 bits for two view models)
+- an array the tables flatten into one property per element (`m_hMyWeapons`, a `SendPropArray3`): the index is a UBitVar into that group of properties
+- a vector (`SendPropUtlVector`: the zone region's `m_trackIds`, `m_renderMode`, `m_bCanSwitchPrimaryTimer` and `m_renderPoints`): the same UBitVar, but the group's first property is the vector's length, so element 0 is the length (as wide as the table's length field) and element k is item k - 1. A zone with four render points sends `m_renderPoints[0] = 4` and then `[1]` to `[4]`.
+
+An entity that starts being recorded takes its state from the baseline its creation names; an update for it in the same frame applies on top. The engine decodes a baseline payload with the same two routines as a frame's (references, then values), and a keyframe is a whole frame, creations and all, read from the keyframe data. So the state at a keyframe's tick is its creations' baselines with its updates applied, which is where playback starts.
 
 The game's own playback logging confirms the whole shape tick by tick. With `mom_tv_debug` at exactly 2 the engine prints a `<REPLAY>` line for every entity it creates or removes and every message it plays, and those lines line up with the stream: at the tick where the log reports twelve entities starting to be recorded in slots 16 to 27, the frame at byte 2208 of the agtricks sample carries exactly twelve creation records naming baselines 12 to 23 and those same slots, in that order; at the tick where the log reports three creations in slots 28 to 30 and twelve removals, the frame at byte 2656 carries exactly that, with the removal list of slots 16 to 27 where this grammar puts it.
 
@@ -304,38 +319,43 @@ Two consequences for a parser:
 
 This also confirms the baseline record fields independently. The recorder prints `Created baseline <n> (<class> @ <edict>:<bits>)`, and those bit counts vary per entity of the same class (seventeen `CFuncBrush` baselines ranging from 91 to 972 bits), so a baseline payload is a property subset, not a fixed dump of every property in the class.
 
-## Property widths the tables do not account for [verified by measurement]
+## Recording modes [verified against the engine]
 
-Eight of the player's properties are written one bit wider than the game's network tables declare: `m_iLandTick`, `m_iJumpTick`, `m_iEarlyJumpTiming`, `hasteEndTick`, `damageBoostEndTick`, `slickEndTick`, `flightEndTick` and `defragTimerEndTick`. Each is a signed 32 bit integer in the tables and takes 33 bits on the wire. The extra bit is not explained, but it is not a guess either: a frame carrying one of them ends a bit early without it, which throws the next frame out of step, and with it every frame of every sample replay lines up. The same is not true of other signed 32 bit integers, `m_nPhysicalButtons` among them, which take exactly what the tables say.
+The engine keeps a table of the classes it records (39 of them, from `CMomentumPlayer` to `CBaseToggle`) and gives each property a mode, which decides what the replay writes on top of the property's network encoding. The playback routine switches on it:
 
-Two properties a replay from an older build records, `m_iViewModelIndex` and `m_iWorldModelIndex`, no longer exist in the tables at all.
+| Mode | What is written                                                                                                   | Properties                                                                                                              |
+| ---- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 0    | the value, as the network tables encode it                                                                        | almost everything                                                                                                       |
+| 1    | the same; playback maps the handle onto its own entities                                                          | entity handles (`m_hOwner`, `m_hActiveWeapon`, `moveparent`, ...)                                                       |
+| 2    | one bit, then the value; the bit says the value is relative to the time of the tick                               | `m_flThrowTime`, `m_flTimer`, `m_flSmackTime`, `m_flDetonateTime`, `m_flStartTime`                                      |
+| 3    | one bit, then the value; the bit says the value is relative to the tick                                           | `m_iLandTick`, `m_iJumpTick`, the player's five `...EndTick`, `m_nNextThinkTick`, `m_iChargeBeginTick`, `m_iCreateTick` |
+| 4    | a varint, how many ticks back the value applies, then the value                                                   | `m_dNetworkRunTime`, the view model's `m_nSequence`                                                                     |
+| 5    | 32 raw bits in place of the network encoding: the CRC32 of the model's name (lowercase, backslashes, NUL counted) | `m_nModelIndex`, everywhere                                                                                             |
+
+Mode 3 is the "one bit wider than the tables" that measurement had found on the tick properties; the bit comes first, not last. Mode 5 means a recorded brush entity names its brush model exactly: brush model N is `*N`, so `CRC32("*26\0")` = 1077424333 is model 26.
+
+The values themselves are decoded with the engine's standard property decoders, the same as CS:GO's: signed integers sign extended, `SPROP_VARINT` (0x80000) as zigzag varints, 64 bit integers as a sign bit and then the low and high words (`m_dNetworkRunTime` holds the bits of a double: `0xBFF0000000000000` is -1, a stopped timer), strings as a 9 bit length and bytes, and floats in the order coordinate, multiplayer coordinate, unscaled, normal, cell coordinate, quantised.
+
+Strata Source widens the world to 65536 units either way, and its coordinate readers widen with it: a coordinate's integer part is 16 bits (not 14), a multiplayer coordinate's 13 inside the map bounds (not 11) and 16 outside, and cell coordinates count from -65536, so with 32 unit cells cell 2048 is the origin and `m_cellX` takes 12 bits.
+
+A few classes send properties of their own in place of the base entity's, which the table dumps did not cover:
+
+- projectiles (`DT_MomExplosive`: rockets, plasma, the BFG, grenades, stickybombs, concs) send `m_angRotation` as three 6 bit angles
+- `CFuncRotating` sends `m_vecOrigin` as a plain coordinate rather than cell coded, and its angles one by one at 13 bits
+- `CSpriteTrail` sends unscaled floats, and `CFuncMoveLinear` its two sound names as strings
 
 ## How exact the walk is [measured]
 
-Reading the frames rather than searching for them, with the keyframe index used to resynchronise, every sample replay decodes almost completely. The remaining losses are confined to the frames where the run timer sends the two properties whose encoding is still open, a 64 bit integer and a string, and those frames sit on zone events, which is exactly where the keyframe index pins the next frame, so a loss never spreads.
+With the recording modes and the element rules, every replay decodes exactly: 373 replays (359 local, 12 from the archive, the 2 fixtures) read all 1.6 million of their frames, the walk lands on all 5105 keyframe anchors without once needing to resynchronise, all 5090 keyframes read whole, and all 8360 baselines consume exactly the bits their records declare. Format version 1 and Zstandard bodies are among them.
 
-| Replay             | Frames read exactly | Ticks the position stands still while moving |
-| ------------------ | ------------------- | -------------------------------------------- |
-| agtricks           | 3445 of 3456        | 0.06%                                        |
-| ab_baume           | 5519 of 5520        | 0.02%                                        |
-| df_cruton          | 5728 of 5761        | 0.00%                                        |
-| bhop_badwater      | 1359 of 1360        | 0.07%                                        |
-| deathrun_unique    | 2248 of 2248        | 0.00%                                        |
-| df_waluigi_pinball | 1974 of 1974        | 0.00%                                        |
-
-For comparison, searching for the frames left between 0.1 and 2.6 percent of moving ticks standing still, and could not decode the pinball replay at all.
-
-What the remaining losses have in common: the frame carries the run timer's payload, where `m_dNetworkRunTime` (a 64 bit integer) and `m_limitedRunSplitsB64` (a string whose contents are not the base64 its name suggests) do not add up. Those properties are only sent when the timer changes state, which happens on a zone event, and a zone event is where the keyframe index pins the next frame, so a loss is corrected within a tick or two and never spreads.
+Before the modes were known, 12 percent of the frames of the same replays were lost and 36 of the replays did not open at all.
 
 ## Open questions
 
 - Baseline `tick` field semantics (275 vs -2468 in the sample).
-- Record header after the class id in baselines: the player's is 26 bits (2 flag bits `(1,1)` then two UBitVar-shaped fields, values 56 and 27, consistent with simulation and animation time deltas), CFuncBrush uses a 22-bit header starting `(0,0)`. The general rule is not yet pinned down.
-- The baseline layout of array props (m_hViewModel: 55 bits observed; m_renderPoints and m_trackIds on zone regions).
-- Exact per-prop widths for CMomentumViewModel, CMomentumPistol and CKnife in the sample's (older) build: today's table dump does not fully match, so a replay recorded by the current build is needed to validate.
-- The leading 6-bit frame field (4 in normal frames, 1 in empty ones) and the end-of-frame terminator (observed `UBitVar 0` + 2 bits + padding).
-- One isolated misread in the sample (tick 1140: a velocity component decodes as -0.0 while the position clearly keeps moving), pointing at a rare prop this parser does not size correctly yet.
-- Revision 2: the structure of the keyframe payloads (per-entity mini records), the frame data prologue, and deathrun replays decode poorly (moving platforms and doors interact badly with the current frame walker).
+- Revision 1 bodies (the bhop_eazy sample, written before early 2025) are still located by search rather than read; the recording modes and element rules above have only been checked against revision 2.
+- The meaning of the leading flag bit of a frame (zero in every frame seen).
+- The scale of quantised floats (`m_angEyeAngles`, `m_vecViewOffset`), which needs the low and high values the table dumps leave out; the raw steps are returned.
 
 ## Map assets
 
@@ -368,6 +388,10 @@ Momentum's maps are VBSP 19 to 25. Version 25, which Strata Source writes, widen
 
 The lump sizes confirm it: in `df_cruton` the faces lump holds 1004472 bytes, which is 13951 faces of 72 bytes, and every face's plane, edge, texinfo, lightmap and original face field lands in range with that layout. TEXINFO, TEXDATA, PLANES, MODELS, VERTEXES and SURFEDGES are unchanged.
 
+### Baked lighting
+
+A map compiled for HDR keeps its light in LIGHTING_HDR (lump 53) and, because the HDR pass lays its samples out on its own, a second copy of the faces in FACES_HDR (lump 58) whose lighting offsets point into it. The engine loads the HDR faces whenever it renders HDR. Most of Momentum's maps are compiled for HDR only: LIGHTING is empty and the plain faces carry no usable offsets, so reading those against the HDR samples hands every face another face's light, which is what made most maps look smeared and blotchy. The geometry still comes from the plain faces; only the light offset, the luxel extent and the lightmap mins come from the HDR ones. Of 44 maps sampled, `bhop_forevertranslucent` and `kz_consistency_se` among them, every one compiled this way renders its light as the game does once read this way.
+
 ### Displacements
 
 A displacement replaces the flat quad of its face with a grid of (2^power + 1) points a side, each pushed along its own direction by its own distance. The record names the vertex it starts from, and the grid begins at whichever corner of the face lies nearest that start position, running row by row from there. Built the other way round the patches come apart: of the 5698 border points `bhop_badwater` shares between neighbouring patches, 3 percent fail to meet with the right order and 78 percent with the transposed one.
@@ -377,6 +401,8 @@ Strata Source widened the record from 176 to 232 bytes. Rather than keying that 
 ### Brush entities
 
 The compiler writes a brush entity's geometry around its own origin and leaves the placing to the entity, so a model is drawn at `origin` turned by `angles` rather than where its vertices say. It is the common case, not a rare one: `agtricks` places 36 of its models this way, `bhop_badwater` 26, `df_waluigi_pinball` 86 and `deathrun_unique` all 132. Of the maps checked, not one has a brush entity whose geometry is already in world coordinates while carrying a non zero origin.
+
+Which brush model a recorded entity moves is in the replay: its `m_nModelIndex` is the CRC32 of `*N` (see "Recording modes"). Every recorded map entity of the replays checked pairs with a brush model that way (31 of 31 on `deathrun_unique`, 20 of 20 on `df_waluigi_pinball`, 130 of 130 on `bhop_suicide`), where pairing by order within a class only worked when the recorder happened to follow every entity of that class. A recorded entity is also hidden while its `m_fEffects` carries `EF_NODRAW` (0x20), and faded by its `m_clrRender` alpha while its render mode is anything but normal, which is how toggled and fading platforms play back.
 
 ### Static props
 
@@ -391,3 +417,7 @@ A map names its sky and the game keeps six images for it: `rt`, `lf`, `bk`, `ft`
 The seams settle the order: the four sides join right, front, left, back going clockwise, which scores a seam error of 5 against 33 for the other arrangement on `agtricks` and 6 against 64 on `ab_baume`, and the top image joins them with its bottom edge running along their top edges.
 
 The heading comes from the maps: a map's `light_environment` records which way its sunlight travels, so the sun sits opposite. Putting `rt` along +X lands the brightest part of the sky within a few degrees of that direction on four maps out of five (6, 11, 24 and 41 degrees), against 83 to 135 degrees off for the three other headings.
+
+An HDR sky keeps its images as `skybox/<sky>_hdr<side>` (the side last), the way the engine looks them up, usually as Valve's compressed HDR: colour in RGB and a brightness in alpha, the value being `rgb * alpha * 16 / 255`. The plain images are what a player without HDR sees, so they come first. A map whose worldspawn names no sky gets the engine's default, `sky_urb01`.
+
+The sky has to be drawn first and the map over it in the same frame: a renderer that clears the frame between the two never shows it, which is what the viewer did until now.
