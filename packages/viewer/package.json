@@ -1,6 +1,6 @@
 {
   "name": "@caixax/momtv-viewer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "WebGL playback engine for Momentum Mod replays: map resolution, playback clock and renderer",
   "author": "caixax <westlargo@proton.me>",
   "license": "MIT",

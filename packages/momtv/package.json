@@ -1,6 +1,6 @@
 {
   "name": "@caixax/momtv",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Parser for Momentum Mod replay files (.momtv, MomentumTV). Zero dependencies, works in browsers, workers and Node.",
   "author": "caixax <westlargo@proton.me>",
   "license": "MIT",
