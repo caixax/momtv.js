@@ -39,6 +39,9 @@ export const SKY_SIDES: {
   { side: 'dn', normal: [0, 0, -1], right: [0, -1, 0], up: [1, 0, 0] },
 ];
 
+/** The sky the engine falls back to when a map's worldspawn names none. */
+const DEFAULT_SKY = 'sky_urb01';
+
 /** A loaded sky. */
 export interface Sky {
   name: string;
@@ -56,19 +59,46 @@ export async function loadSky(
   name: string | undefined,
   resolver: MaterialResolver,
 ): Promise<Sky | undefined> {
-  if (!name) return undefined;
-  const base = name.toLowerCase();
+  // A map that names no sky gets the engine's default.
+  const base = (name || DEFAULT_SKY).toLowerCase();
   const faces: SkyFace[] = [];
   let any = false;
   for (const side of SKY_SIDES) {
-    // HDR skies keep a second set of images beside the plain ones.
-    const material =
-      (await tryResolve(resolver, `skybox/${base}${side.side}_hdr`)) ??
-      (await tryResolve(resolver, `skybox/${base}${side.side}`));
-    if (material?.texture) any = true;
-    faces.push({ ...side, texture: material?.texture });
+    // The plain images first, as a player without HDR sees them. A sky that
+    // only ships HDR images names them the way the engine looks them up: the
+    // sky, then _hdr, then the side.
+    const plain = await tryResolve(resolver, `skybox/${base}${side.side}`);
+    const hdr = plain ? undefined : await tryResolve(resolver, `skybox/${base}_hdr${side.side}`);
+    const texture = plain?.texture ?? (hdr?.texture && expandHdr(hdr.texture));
+    if (texture) any = true;
+    faces.push({ ...side, texture });
   }
   return any ? { name: base, faces } : undefined;
+}
+
+/**
+ * Exposure that brings a compressed HDR sky to the brightness of its plain
+ * twin, measured on sky_day01_01 (the plain image averages 158, the expanded
+ * HDR one 195).
+ */
+const HDR_EXPOSURE = 0.8;
+
+/**
+ * Turns a compressed HDR image into a plain one. Valve's compressed HDR keeps
+ * the colour in RGB and a brightness in alpha, the real value being
+ * rgb * alpha * 16 / 255.
+ */
+function expandHdr(texture: DecodedTexture): DecodedTexture {
+  const pixels = new Uint8Array(texture.pixels.length);
+  const scale = (16 * HDR_EXPOSURE) / 255;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const brightness = texture.pixels[i + 3]! * scale;
+    pixels[i] = Math.min(255, texture.pixels[i]! * brightness);
+    pixels[i + 1] = Math.min(255, texture.pixels[i + 1]! * brightness);
+    pixels[i + 2] = Math.min(255, texture.pixels[i + 2]! * brightness);
+    pixels[i + 3] = 255;
+  }
+  return { ...texture, pixels };
 }
 
 /** Resolves a material, treating anything unreadable as absent. */

@@ -123,6 +123,7 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
         Number.isNaN(state.angles[2]) ? link.angles[2] : state.angles[2],
       ];
       renderer.setModelTransform(link.model, mat4FromAngles(angles, origin));
+      renderer.setModelOpacity(link.model, state.visible ? state.alpha : 0);
     }
   };
 
@@ -193,8 +194,12 @@ export function createViewer(canvas: HTMLCanvasElement, options: ViewerOptions =
           ? poseToCamera(thirdPersonCamera(state))
           : poseToCamera(firstPersonCamera(state));
     const shot = { ...cam, fovYDegrees: fov };
+    // One clear per frame: the sky goes down first and the map over it.
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0.35, 0.47, 0.6, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (layers.sky) sky.render(shot);
-    renderer.render(shot);
+    renderer.render(shot, false);
     if (layers.props) props.render(shot);
   };
 

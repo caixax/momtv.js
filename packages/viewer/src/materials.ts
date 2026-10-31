@@ -19,6 +19,8 @@ export interface LoadedMaterial {
   translucent: boolean;
   /** Constant opacity on top of the texture's alpha. */
   alpha: number;
+  /** Drawn at full brightness, without the map's baked light. */
+  unlit: boolean;
 }
 
 /** Options for {@link loadMaterials}. */
@@ -149,6 +151,7 @@ export async function createMaterialResolver(
       alphaTestReference: 0.5,
       translucent: false,
       alpha: 1,
+      unlit: false,
     };
     if (!loaded.drawn) return loaded;
     const vmt = await readVmt(name).catch(() => undefined);
@@ -157,6 +160,7 @@ export async function createMaterialResolver(
       loaded.alphaTestReference = vmt.alphaTestReference;
       loaded.translucent = vmt.translucent;
       loaded.alpha = vmt.alpha;
+      loaded.unlit = vmt.unlit;
       if (vmt.invisible) loaded.drawn = false;
     }
     if (!loaded.drawn) return loaded;
@@ -173,7 +177,13 @@ export async function createMaterialResolver(
   return {
     assets,
     resolve(name, fallbackColour) {
-      const key = name.replace(/\\/g, '/').toLowerCase();
+      // The engine reads a material name the way it reads any path: either
+      // slash, any case, and no leading or doubled separators.
+      const key = name
+        .replace(/\\/g, '/')
+        .replace(/\/{2,}/g, '/')
+        .replace(/^\//, '')
+        .toLowerCase();
       let pending = resolved.get(key);
       if (!pending) {
         pending = resolveOne(key, fallbackColour ?? [0.6, 0.6, 0.6]);

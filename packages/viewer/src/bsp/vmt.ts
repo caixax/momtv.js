@@ -26,6 +26,11 @@ export interface Vmt {
   /** Both sides of the surface are drawn. */
   noCull: boolean;
   /**
+   * The surface ignores the map's lighting and shows its texture as it is,
+   * as the unlit shaders do.
+   */
+  unlit: boolean;
+  /**
    * The surface exists for the compiler or the game logic and is invisible in
    * play: triggers, clips, areaportals, nodraw.
    */
@@ -37,6 +42,9 @@ const DEFAULT_ALPHA_TEST = 0.5;
 
 /** Shaders that never put anything on screen. */
 const INVISIBLE_SHADERS = new Set(['hidden']);
+
+/** Shaders that draw their texture without the map's light. */
+const UNLIT_SHADERS = new Set(['unlitgeneric', 'unlittwotexture', 'sky', 'sprite', 'modulate']);
 
 /**
  * Flags a compiled material carries when the brush is a tool brush. Any of
@@ -119,6 +127,7 @@ export function parseVmt(text: string): Vmt {
     translucent: flag(body, '$translucent') || alpha < 1,
     alpha,
     noCull: flag(body, '$nocull'),
+    unlit: UNLIT_SHADERS.has(shader),
     invisible: INVISIBLE_SHADERS.has(shader) || INVISIBLE_FLAGS.some((key) => flag(body, key)),
   };
   if (base) vmt.baseTexture = normalisePath(base);
@@ -139,6 +148,7 @@ export function applyPatch(patch: Vmt, included: Vmt): Vmt {
     alphaTest: patch.alphaTest || included.alphaTest,
     translucent: patch.translucent || included.translucent,
     noCull: patch.noCull || included.noCull,
+    unlit: included.unlit,
     invisible: patch.invisible || included.invisible,
     alpha: patch.alpha < 1 ? patch.alpha : included.alpha,
     alphaTestReference:

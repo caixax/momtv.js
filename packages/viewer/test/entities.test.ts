@@ -1,4 +1,4 @@
-import type { EntityTrack } from '@caixax/momtv';
+import { modelNameCrc, type EntityTrack } from '@caixax/momtv';
 import { describe, expect, it } from 'vitest';
 import type { BspMap, BspModel } from '../src/bsp/bsp-file.js';
 import { linkBrushEntities } from '../src/entities.js';
@@ -37,19 +37,46 @@ function mapWith(models: BspModel[]): BspMap {
   };
 }
 
-function entityTrack(className: string, classIndex: number): EntityTrack {
+function entityTrack(className: string, classIndex: number, model?: number): EntityTrack {
   return {
     slot: classIndex,
     className,
     classIndex,
+    model,
     cellWidth: 32,
+    absoluteOrigin: false,
     ticks: Uint32Array.of(0),
-    values: Float32Array.of(NaN, NaN, NaN, NaN, NaN, NaN, 0, 0, 0),
+    values: Float32Array.of(NaN, NaN, NaN, NaN, NaN, NaN, 0, 0, 0, 0, 255, 0),
     moves: true,
   };
 }
 
 describe('linkBrushEntities', () => {
+  it('pairs an entity with the brush model it names', () => {
+    const map = mapWith([
+      model(undefined, [0, 0, 0]),
+      model('func_door', [10, 0, 0]),
+      model('func_door', [20, 0, 0]),
+      model('func_door', [30, 0, 0]),
+    ]);
+    // the recorder followed only two of the three doors, out of order
+    const linked = linkBrushEntities(map, [
+      entityTrack('CBaseDoor', 0, modelNameCrc('*3')),
+      entityTrack('CBaseDoor', 1, modelNameCrc('*1')),
+    ]);
+    expect(linked.map((l) => l.model)).toEqual([3, 1]);
+    expect(linked[0]!.origin).toEqual([30, 0, 0]);
+  });
+
+  it('leaves out an entity that draws a studio model', () => {
+    const map = mapWith([model(undefined, [0, 0, 0]), model('func_door', [10, 0, 0])]);
+    const linked = linkBrushEntities(map, [
+      entityTrack('CMomPickup', 0, modelNameCrc('models/pickups/haste.mdl')),
+      entityTrack('CBaseDoor', 0),
+    ]);
+    expect(linked.map((l) => l.model)).toEqual([1]);
+  });
+
   it('pairs each recorded entity with the map entity of the same order', () => {
     const map = mapWith([
       model(undefined, [0, 0, 0]), // the world

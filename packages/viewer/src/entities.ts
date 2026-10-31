@@ -1,20 +1,20 @@
-import type { EntityTrack } from '@caixax/momtv';
+import { modelNameCrc, type EntityTrack } from '@caixax/momtv';
 import type { BspMap } from './bsp/bsp-file.js';
 
 /**
  * Pairs the entities a replay records with the brush models of the map.
  *
- * A replay says what each recorded entity did, not which lump of geometry it
- * is: the recorder and playback both take that from the map. What they share
- * is the order, since the server creates a map's entities in the order the
- * entity lump lists them and the recorder follows suit. So the k'th recorded
- * entity of a class is the k'th brush entity of the map that is networked as
- * that class.
+ * A replay names the model each recorded entity draws, as the CRC32 of the
+ * model's name, and a brush model's name is `*N` for model N of the map. So
+ * the pairing is exact: no counting, no guessing.
  *
- * The pairing is only used when the counts agree exactly. A map with an
- * entity the recorder did not follow (or the other way round) leaves that
- * class alone, which costs a few still traps rather than moving the wrong
- * piece of the map.
+ * A replay that never sends a model (none seen so far, but the recorder only
+ * sends what differs from what it assumes) falls back to the order: the
+ * server creates a map's entities in the order the entity lump lists them and
+ * the recorder follows suit, so the k'th recorded entity of a class is the
+ * k'th brush entity of the map networked as that class. That is only used
+ * when the counts agree exactly, which costs a few still traps rather than
+ * moving the wrong piece of the map.
  */
 
 /** Server class each brush entity is networked as. */
@@ -55,6 +55,31 @@ export interface LinkedEntity {
  * @returns one entry per entity that could be paired up with certainty
  */
 export function linkBrushEntities(map: BspMap, tracks: readonly EntityTrack[]): LinkedEntity[] {
+  const linked: LinkedEntity[] = [];
+  const place = (track: EntityTrack, model: number): void => {
+    const placement = map.models[model]?.placement;
+    linked.push({
+      track,
+      model,
+      origin: placement ? [...placement.origin] : [0, 0, 0],
+      angles: placement ? [...placement.angles] : [0, 0, 0],
+    });
+  };
+
+  // By the model each entity names: brush model N is `*N`.
+  const byCrc = new Map<number, number>();
+  for (let index = 1; index < map.models.length; index++) {
+    byCrc.set(modelNameCrc(`*${index}`), index);
+  }
+  const unnamed: EntityTrack[] = [];
+  for (const track of tracks) {
+    const model = track.model === undefined ? undefined : byCrc.get(track.model);
+    if (model !== undefined) place(track, model);
+    else if (track.model === undefined) unnamed.push(track);
+    // An entity whose model is a studio model is not part of the brushwork.
+  }
+  if (unnamed.length === 0) return linked;
+
   // The map's brush models, grouped by the class they are networked as, in
   // entity lump order.
   const byClass = new Map<string, number[]>();
@@ -69,27 +94,17 @@ export function linkBrushEntities(map: BspMap, tracks: readonly EntityTrack[]): 
   }
 
   const recorded = new Map<string, EntityTrack[]>();
-  for (const track of tracks) {
+  for (const track of unnamed) {
     const list = recorded.get(track.className) ?? [];
     list.push(track);
     recorded.set(track.className, list);
   }
 
-  const linked: LinkedEntity[] = [];
   for (const [className, list] of recorded) {
     const models = byClass.get(className);
     if (!models || models.length !== list.length) continue;
     const sorted = [...list].sort((a, b) => a.classIndex - b.classIndex);
-    for (const [i, track] of sorted.entries()) {
-      const model = models[i]!;
-      const placement = map.models[model]?.placement;
-      linked.push({
-        track,
-        model,
-        origin: placement ? [...placement.origin] : [0, 0, 0],
-        angles: placement ? [...placement.angles] : [0, 0, 0],
-      });
-    }
+    for (const [i, track] of sorted.entries()) place(track, models[i]!);
   }
   return linked;
 }

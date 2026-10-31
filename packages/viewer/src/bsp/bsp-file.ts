@@ -21,6 +21,7 @@ const LUMP = {
   FACES: 7,
   LIGHTING: 8,
   LIGHTING_HDR: 53,
+  FACES_HDR: 58,
   EDGES: 12,
   SURFEDGES: 13,
   MODELS: 14,
@@ -426,9 +427,15 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   const dispInfo = readLump(file, LUMP.DISPINFO);
   const dispVerts = readLump(file, LUMP.DISP_VERTS);
   // HDR lighting is preferred when the map ships it, matching what the game
-  // renders on modern hardware
+  // renders on modern hardware. Its offsets live in a second copy of the faces,
+  // since the HDR pass lays its samples out on its own: a map compiled for HDR
+  // only (as most of Momentum's are) leaves the plain faces with no lighting
+  // offsets at all, and reading those against the HDR samples paints every face
+  // with another face's light.
   const lightingHdr = readLump(file, LUMP.LIGHTING_HDR);
-  const lighting = lightingHdr.length > 0 ? lightingHdr : readLump(file, LUMP.LIGHTING);
+  const hdr = lightingHdr.length > 0;
+  const lighting = hdr ? lightingHdr : readLump(file, LUMP.LIGHTING);
+  const facesHdr = hdr ? readLump(file, LUMP.FACES_HDR) : new Uint8Array(0);
 
   const vertView = new DataView(vertexes.buffer, vertexes.byteOffset, vertexes.byteLength);
   const edgeView = new DataView(edges.buffer, edges.byteOffset, edges.byteLength);
@@ -530,16 +537,24 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
   }
   const faceLightmap = new Map<number, LightmapRect>();
   let lightmapAtlas: Lightmap | undefined;
+  // The HDR faces describe the same faces in the same order, so a face's
+  // geometry still comes from the plain lump and only its light from these.
+  const LIT_FACE = lumpVersion(file, LUMP.FACES_HDR) >= 2 ? FACE_WIDE : FACE_ORIGINAL;
+  const litFaces = facesHdr.length >= faceCount * LIT_FACE.size ? facesHdr : undefined;
+  const litView = litFaces
+    ? new DataView(litFaces.buffer, litFaces.byteOffset, litFaces.byteLength)
+    : faceView;
+  const lit = litFaces ? LIT_FACE : FACE;
   if (lighting.length > 0) {
     const PAD = 1;
     const ATLAS_WIDTH = 2048;
     const placements: { face: number; w: number; h: number; lightofs: number }[] = [];
     for (let f = 0; f < faceCount; f++) {
-      const fo = f * FACE.size;
-      const lightofs = faceView.getInt32(fo + FACE.lightOffset, true);
+      const fo = f * lit.size;
+      const lightofs = litView.getInt32(fo + lit.lightOffset, true);
       if (lightofs < 0 || lightofs >= lighting.length) continue;
-      const w = faceView.getInt32(fo + FACE.lightmapSize, true) + 1;
-      const h = faceView.getInt32(fo + FACE.lightmapSize + 4, true) + 1;
+      const w = litView.getInt32(fo + lit.lightmapSize, true) + 1;
+      const h = litView.getInt32(fo + lit.lightmapSize + 4, true) + 1;
       if (w <= 0 || h <= 0 || w > 512 || h > 512) continue;
       placements.push({ face: f, w, h, lightofs });
     }
@@ -646,8 +661,9 @@ export function parseBsp(data: ArrayBuffer | Uint8Array): BspMap {
       }
 
       const rect = faceLightmap.get(f);
-      const lightmapMinsU = faceView.getInt32(fo + FACE.lightmapMins, true);
-      const lightmapMinsV = faceView.getInt32(fo + FACE.lightmapMins + 4, true);
+      const lo = f * lit.size;
+      const lightmapMinsU = litView.getInt32(lo + lit.lightmapMins, true);
+      const lightmapMinsV = litView.getInt32(lo + lit.lightmapMins + 4, true);
       const materialIndex =
         texdataIdx >= 0 && texdataIdx < materialOfTexdata.length
           ? materialOfTexdata[texdataIdx]!

@@ -52,6 +52,7 @@ uniform bool uHasLightmap;
 uniform vec2 uTexelScale;
 uniform float uAlphaRef;
 uniform float uAlpha;
+uniform bool uUnlit;
 out vec4 outColor;
 void main() {
   vec4 sampled = uHasTexture
@@ -60,7 +61,9 @@ void main() {
   // A negative reference means the material does not cut itself out.
   if (sampled.a < uAlphaRef) discard;
   vec3 light;
-  if (uHasLightmap && vLightmapUv.x >= 0.0) {
+  if (uUnlit) {
+    light = vec3(1.0);
+  } else if (uHasLightmap && vLightmapUv.x >= 0.0) {
     // baked lighting, lifted slightly so unlit corners stay readable
     light = texture(uLightmap, vLightmapUv).rgb * 1.8 + 0.08;
   } else {
@@ -88,6 +91,8 @@ interface DrawBatch {
   alphaRef: number;
   /** Constant opacity the material asks for. */
   alpha: number;
+  /** Shown as its texture is, without the baked light. */
+  unlit: boolean;
   /** Drawn in the blended pass, after everything opaque. */
   translucent: boolean;
   /** Mid point of the batch, to sort the blended pass by depth. */
@@ -116,6 +121,7 @@ export class MapRenderer {
     texelScale: WebGLUniformLocation;
     alphaRef: WebGLUniformLocation;
     alpha: WebGLUniformLocation;
+    unlit: WebGLUniformLocation;
     model: WebGLUniformLocation;
   };
   private batches: DrawBatch[] = [];
@@ -124,6 +130,8 @@ export class MapRenderer {
   private placements: Mat4[] = [];
   /** Where each model is drawn right now, which playback may move. */
   private transforms: Mat4[] = [];
+  /** Opacity of each model right now: 0 hides it, below 1 blends it. */
+  private opacity: number[] = [];
   private textures: WebGLTexture[] = [];
   private lightmapTexture: WebGLTexture | null = null;
 
@@ -145,6 +153,7 @@ export class MapRenderer {
       texelScale: need('uTexelScale'),
       alphaRef: need('uAlphaRef'),
       alpha: need('uAlpha'),
+      unlit: need('uUnlit'),
       model: need('uModel'),
     };
   }
@@ -181,6 +190,11 @@ export class MapRenderer {
       }
     }
 
+    const anisotropy = gl.getExtension('EXT_texture_filter_anisotropic');
+    const maxAnisotropy = anisotropy
+      ? Math.min(8, gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number)
+      : 1;
+
     // one GPU texture per material, shared by all batches using it
     const glTextures = new Map<number, { texture: WebGLTexture; width: number; height: number }>();
     if (materials) {
@@ -205,6 +219,11 @@ export class MapRenderer {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        // Floors and walls are mostly seen at a slant, where plain mipmapping
+        // smears a texture into a blur long before the game would.
+        if (anisotropy) {
+          gl.texParameterf(gl.TEXTURE_2D, anisotropy.TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
+        }
         gl.generateMipmap(gl.TEXTURE_2D);
         this.textures.push(texture);
         glTextures.set(i, { texture, width: decoded.width, height: decoded.height });
@@ -220,6 +239,7 @@ export class MapRenderer {
         : mat4Identity(),
     );
     this.transforms = [...this.placements];
+    this.opacity = this.placements.map(() => 1);
 
     for (const [modelIndex, model] of map.models.entries()) {
       for (const group of model.meshes) {
@@ -257,6 +277,7 @@ export class MapRenderer {
           // texture was resolved: a flat colour has no alpha to test.
           alphaRef: loaded?.alphaTest && resolved ? loaded.alphaTestReference : -1,
           alpha: loaded?.alpha ?? 1,
+          unlit: loaded?.unlit ?? false,
           translucent: (loaded?.translucent ?? false) && !loaded?.alphaTest,
           center: centerOf(group.positions),
         };
@@ -277,15 +298,36 @@ export class MapRenderer {
     this.transforms[model] = transform ?? this.placements[model] ?? mat4Identity();
   }
 
-  /** Renders one frame. */
-  render(camera: RenderCamera): void {
+  /**
+   * Shows, hides or fades a brush model, which is how a replay's toggled and
+   * fading brushes are followed.
+   *
+   * @param model - index into the map's models
+   * @param opacity - 1 to draw it as the map does, 0 to hide it, anything
+   * between to blend it
+   */
+  setModelOpacity(model: number, opacity: number): void {
+    if (model < 0 || model >= this.opacity.length) return;
+    this.opacity[model] = Math.max(0, Math.min(1, opacity));
+  }
+
+  /**
+   * Renders one frame.
+   *
+   * @param clear - start from a blank frame. A caller that paints something
+   * behind the map first, such as the sky, clears the frame itself and passes
+   * false, so the map draws over what is already there.
+   */
+  render(camera: RenderCamera, clear = true): void {
     const gl = this.gl;
     const canvas = gl.canvas as HTMLCanvasElement;
     const width = canvas.width;
     const height = canvas.height;
     gl.viewport(0, 0, width, height);
-    gl.clearColor(0.35, 0.47, 0.6, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    if (clear) {
+      gl.clearColor(0.35, 0.47, 0.6, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    }
     gl.enable(gl.DEPTH_TEST);
     // Brush faces are single sided in the file but the viewer is often inside
     // sealed geometry looking at it from either side (and displacements are
@@ -313,13 +355,15 @@ export class MapRenderer {
     }
     gl.activeTexture(gl.TEXTURE0);
 
+    const opacityOf = (batch: DrawBatch): number => this.opacity[batch.model] ?? 1;
     const draw = (batch: DrawBatch): void => {
       gl.uniformMatrix4fv(this.uniforms.model, false, this.transforms[batch.model] ?? IDENTITY);
       gl.uniform3fv(this.uniforms.color, batch.color);
       gl.uniform1i(this.uniforms.hasTexture, batch.texture ? 1 : 0);
       gl.uniform2fv(this.uniforms.texelScale, batch.texelScale);
       gl.uniform1f(this.uniforms.alphaRef, batch.alphaRef);
-      gl.uniform1f(this.uniforms.alpha, batch.alpha);
+      gl.uniform1f(this.uniforms.alpha, batch.alpha * opacityOf(batch));
+      gl.uniform1i(this.uniforms.unlit, batch.unlit ? 1 : 0);
       if (batch.texture) gl.bindTexture(gl.TEXTURE_2D, batch.texture);
       gl.bindVertexArray(batch.vao);
       gl.drawElements(gl.TRIANGLES, batch.indexCount, gl.UNSIGNED_INT, 0);
@@ -327,9 +371,17 @@ export class MapRenderer {
 
     gl.disable(gl.BLEND);
     gl.depthMask(true);
-    for (const batch of this.batches) draw(batch);
+    // A model the replay fades joins the blended pass for as long as it is
+    // faded, and one it hides is not drawn at all.
+    const faded: DrawBatch[] = [];
+    for (const batch of this.batches) {
+      const opacity = opacityOf(batch);
+      if (opacity >= 1) draw(batch);
+      else if (opacity > 0) faded.push(batch);
+    }
+    const blended = [...faded, ...this.blended.filter((batch) => opacityOf(batch) > 0)];
 
-    if (this.blended.length > 0) {
+    if (blended.length > 0) {
       // Blended surfaces go last, farthest first, and do not write depth, so a
       // pane of glass does not hide what is behind it.
       const [cx, cy, cz] = camera.position;
@@ -341,7 +393,7 @@ export class MapRenderer {
         const wz = m[2]! * x + m[6]! * y + m[10]! * z + m[14]!;
         return (wx - cx) ** 2 + (wy - cy) ** 2 + (wz - cz) ** 2;
       };
-      const order = [...this.blended].sort((a, b) => distance(b) - distance(a));
+      const order = blended.sort((a, b) => distance(b) - distance(a));
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
@@ -363,6 +415,7 @@ export class MapRenderer {
     this.blended = [];
     this.placements = [];
     this.transforms = [];
+    this.opacity = [];
     this.textures = [];
     this.lightmapTexture = null;
   }

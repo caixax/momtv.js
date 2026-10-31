@@ -359,28 +359,29 @@ export function createPlayer(container: HTMLElement, options: PlayerOptions = {}
   window.addEventListener('keydown', onKey);
 
   /**
-   * When an event happened. Newer replays write a compact timeline that leaves
-   * the run timer out, so fall back to where the event sits in the playback.
+   * When an event happened on the run timer. The library works it out for
+   * every event from the timer start on, so this only falls back for one it
+   * could not place.
    */
   const eventTime = (event: { tick: number; time: number }): number =>
-    Number.isFinite(event.time) ? event.time : event.tick * tickInterval;
+    Number.isFinite(event.time) ? event.time : (event.tick - startTick) * tickInterval;
 
   /** Puts a mark on the seek bar for every zone the run passed. */
   const drawZones = (): void => {
     ui.seekZones.replaceChildren();
     const events = viewer.replay?.events ?? [];
     zones = events
-      .filter((event) => event.type === 2 || event.type === 3)
+      .filter((event) => event.kind === 'split' || event.kind === 'finish')
       .map((event) => ({
         tick: event.tick,
         label:
-          event.type === 3
+          event.kind === 'finish'
             ? `finish ${formatTime(eventTime(event))}`
             : `${event.minorNum > 1 ? `checkpoint ${event.minorNum}` : `stage ${event.majorNum}`} ${formatTime(eventTime(event))}`,
       }))
       .sort((a, b) => a.tick - b.tick);
     for (const event of events) {
-      if (event.type !== 2) continue;
+      if (event.kind !== 'split') continue;
       const at = (event.tick * tickInterval) / Math.max(0.001, duration);
       if (at <= 0 || at >= 1) continue;
       const mark = document.createElement('div');
