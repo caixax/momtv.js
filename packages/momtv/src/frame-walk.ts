@@ -26,8 +26,10 @@ import type { DecodeStats } from './player-track.js';
  * @param propBits - bits a property index takes, from the header
  * @param options - which properties the reader should keep
  * @param visit - called once per tick, in order
- * @param seeded - called once with what the keyframe says each slot holds,
- * before the first tick
+ * @param seeded - called once before the first tick with what the first
+ * keyframe says each slot holds, and the keyframe itself: its creations carry
+ * each entity's baseline state and its updates the changes from those, so
+ * together they are where everything starts
  */
 export function walkFrames(
   body: ReplayBody,
@@ -35,11 +37,17 @@ export function walkFrames(
   propBits: number,
   options: FrameReaderOptions,
   visit: (tick: number, frame: Frame | undefined) => void,
-  seeded?: (slots: Map<number, SlotEntity>) => void,
+  seeded?: (slots: Map<number, SlotEntity>, keyframe: Frame | undefined) => void,
 ): DecodeStats {
   const reader = new FrameReader(body, propBits, options);
-  reader.seedFromKeyframe();
-  seeded?.(reader.slotEntities());
+  let keyframe: Frame | undefined;
+  try {
+    keyframe = reader.readKeyframe(0);
+  } catch {
+    // A keyframe this cannot read whole still names what the slots hold.
+    reader.seedFromKeyframe();
+  }
+  seeded?.(reader.slotEntities(), keyframe);
 
   // For a keyframe at tick T the index records where the frame for T + 1
   // starts, since playback reads the keyframe and the next frame advances the

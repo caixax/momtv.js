@@ -1,6 +1,7 @@
 import { BitReader } from './bit-reader.js';
-import type { ReplayBody, ReplayClass } from './body-sections.js';
+import type { BaselineRecord, ReplayBody, ReplayClass } from './body-sections.js';
 import { MomtvError } from './error.js';
+import { RecordMode, recordModeOf } from './recording-spec.js';
 import {
   type PropEncoding,
   type PropValue,
@@ -36,14 +37,57 @@ import {
  * its baseline.
  */
 
-/** Bits an array element index takes. */
-const ELEMENT_BITS = 6;
+/**
+ * Reads which element of an array a reference names. A network array property
+ * takes just enough bits to count its elements; an array the tables flatten
+ * into one property per element takes a UBitVar, since the recorder picks the
+ * element among those properties.
+ */
+function readElement(r: BitReader, encoding: PropEncoding): number {
+  if (!encoding.a) return r.readUBitVar();
+  const elements = encoding.m ?? 1;
+  return r.readBits(elements > 1 ? Math.floor(Math.log2(elements)) + 1 : 1);
+}
 
-/** Counts past which a frame is called corrupt rather than parsed. */
-const MAX_CREATIONS = 256;
-const MAX_DIRECTORY = 64;
-const MAX_REMOVALS = 64;
-const MAX_MESSAGES = 64;
+/**
+ * Reads one recorded value: whatever the recording mode puts in front of it,
+ * then the value itself. An array reference carries one element, not the
+ * whole array.
+ */
+function readRecorded(
+  r: BitReader,
+  mode: RecordMode,
+  encoding: PropEncoding,
+  element: number | undefined,
+): PropValue {
+  switch (mode) {
+    case RecordMode.ModelIndex:
+      return r.readBits(32);
+    case RecordMode.TimeRelative:
+    case RecordMode.TickRelative:
+      r.readBit();
+      break;
+    case RecordMode.Deferred:
+      r.readVarInt32();
+      break;
+  }
+  if (encoding.k !== 'array') return readPropValue(r, encoding);
+  // A vector's first property is its length; its elements follow it.
+  if (encoding.l && element === 0) return r.readBits(encoding.c ?? 0);
+  return readPropValue(r, encoding.e!);
+}
+
+/**
+ * Counts past which a frame is called corrupt rather than parsed. Entity
+ * counts are bounded by the engine's edicts, which a 13 bit handle index
+ * addresses: a map that brings dozens of brushes in and out of view at once
+ * creates and removes that many in a single frame.
+ */
+const MAX_EDICTS = 1 << 13;
+const MAX_CREATIONS = MAX_EDICTS;
+const MAX_DIRECTORY = MAX_EDICTS;
+const MAX_REMOVALS = MAX_EDICTS;
+const MAX_MESSAGES = 256;
 const MAX_MESSAGE_BYTES = 1 << 20;
 
 /** What a slot currently holds. */
@@ -51,6 +95,10 @@ interface SlotState {
   className: string;
   props: readonly PropEncoding[];
   propNames: readonly string[];
+  /** How the recorder writes each property on top of its encoding. */
+  modes: readonly RecordMode[];
+  /** Values the class holds, counting every element of its arrays. */
+  capacity: number;
 }
 
 /** An entity the walk knows about: what it is, and where it came from. */
@@ -78,6 +126,12 @@ export interface CreatedEntity {
    * a slot the recorder is free to pick again.
    */
   baseline: number;
+  /**
+   * The state the baseline gives the entity, before anything this frame or a
+   * later one changes, as far as the reader's options want it. Empty when the
+   * baseline cannot be read.
+   */
+  state: DecodedProp[];
 }
 
 /** What one frame did to one entity. */
@@ -115,7 +169,8 @@ export interface FrameReaderOptions {
  * misread shows up as a decode error instead of as drift.
  */
 export class FrameReader {
-  private readonly reader: BitReader;
+  /** The stream being read: the frame data, or a keyframe while one is read. */
+  private reader: BitReader;
   private readonly bytes: Uint8Array;
   private readonly keyframeData: { offset: number; length: number };
   private readonly byName = new Map<string, SlotState>();
@@ -125,6 +180,10 @@ export class FrameReader {
   private readonly slots = new Map<number, SlotState>();
   /** Baseline each slot was created from, which identifies the entity. */
   private readonly slotBaseline = new Map<number, number>();
+  /** The baseline records, by the index a creation names. */
+  private readonly baselineRecords = new Map<number, BaselineRecord>();
+  /** Baselines already decoded, since an entity can come and go many times. */
+  private readonly baselineStates = new Map<number, DecodedProp[]>();
   private readonly propBits: number;
   private readonly wanted: (className: string, propName: string) => boolean;
 
@@ -146,6 +205,7 @@ export class FrameReader {
     for (const baseline of body.baselines) {
       const name = names.get(baseline.classId);
       if (name) this.baselineClass.set(baseline.entity, name);
+      this.baselineRecords.set(baseline.entity, baseline);
     }
   }
 
@@ -171,6 +231,30 @@ export class FrameReader {
   /** Records that a slot holds a class, by name. */
   setSlotClass(slot: number, className: string): void {
     this.slots.set(slot, this.stateFor(className));
+  }
+
+  /**
+   * Reads a keyframe as the whole frame it is: the creations that fill the slot
+   * map, and each entity's changes from its baseline, which together are the
+   * state at the keyframe's tick. The engine reads keyframes and frames with
+   * one routine, and so does this. The frame walk stays where it was, and the
+   * returned frame's bit offsets mean nothing.
+   *
+   * @param keyframeOffset - byte offset into the keyframe data, from the index
+   */
+  readKeyframe(keyframeOffset = 0): Frame {
+    const frames = this.reader;
+    const section = this.keyframeData;
+    this.reader = new BitReader(
+      this.bytes,
+      section.offset + keyframeOffset,
+      section.length - keyframeOffset,
+    );
+    try {
+      return this.readFrame();
+    } finally {
+      this.reader = frames;
+    }
   }
 
   /**
@@ -208,10 +292,14 @@ export class FrameReader {
     if (cached) return cached;
     const cls = this.classList.find((c) => c.name === className);
     if (!cls) throw new MomtvError('BAD_BODY', `the replay does not record class ${className}`);
+    const props = resolveClassProps(cls.name, cls.props);
     const state: SlotState = {
       className,
-      props: resolveClassProps(cls.name, cls.props),
+      props,
       propNames: cls.props,
+      modes: cls.props.map((name) => recordModeOf(cls.name, name)),
+      // an array's elements, plus the length a flattened array also carries
+      capacity: props.reduce((sum, p) => sum + (p.k === 'array' ? (p.m ?? 1) + 1 : 1), 0),
     };
     this.byName.set(className, state);
     return state;
@@ -248,7 +336,7 @@ export class FrameReader {
         if (!name) throw new MomtvError('BAD_BODY', `a creation names baseline ${baseline}`);
         this.slots.set(slot, this.stateFor(name));
         this.slotBaseline.set(slot, baseline);
-        created.push({ slot, className: name, baseline });
+        created.push({ slot, className: name, baseline, state: this.baselineState(baseline) });
       }
     }
 
@@ -295,13 +383,56 @@ export class FrameReader {
     return { startBit, endBit: this.bitPos, flag, created, removed, updates };
   }
 
-  private readPayload(state: SlotState): DecodedProp[] {
-    const r = this.reader;
+  /**
+   * Decodes a baseline: the state an entity takes when a creation names it.
+   * A baseline payload is written exactly like a frame's, which is how the
+   * engine reads it too, so this gives the entity's starting position and the
+   * model it draws.
+   */
+  /** A baseline's state, decoded once, or nothing when it cannot be read. */
+  private baselineState(index: number): DecodedProp[] {
+    const cached = this.baselineStates.get(index);
+    if (cached) return cached;
+    const record = this.baselineRecords.get(index);
+    let state: DecodedProp[] = [];
+    if (record && record.payloadBits > 0) {
+      try {
+        state = this.readBaseline(record).props;
+      } catch {
+        // A baseline that will not decode still leaves its entity trackable
+        // from the frames; it just starts from nothing.
+        state = [];
+      }
+    }
+    this.baselineStates.set(index, state);
+    return state;
+  }
+
+  readBaseline(baseline: BaselineRecord): {
+    className: string;
+    props: DecodedProp[];
+    /** Bits the payload took, which matches the record's own length when read right. */
+    bits: number;
+  } {
+    const className = this.baselineClass.get(baseline.entity);
+    if (!className) {
+      throw new MomtvError('BAD_BODY', `baseline ${baseline.entity} has no recorded class`);
+    }
+    const r = new BitReader(this.bytes);
+    r.bitPos = baseline.payloadBitOffset;
+    const props = this.readPayload(this.stateFor(className), r);
+    return { className, props, bits: r.bitPos - baseline.payloadBitOffset };
+  }
+
+  private readPayload(state: SlotState, r: BitReader = this.reader): DecodedProp[] {
     const count = r.readUBitVar();
-    if (count === 0 || count > state.props.length) {
+    // Each element of an array is a reference of its own, so a full state (a
+    // baseline, a keyframe) can hold more references than the class has
+    // properties, though never more than it has values.
+    if (count === 0 || count > state.capacity) {
       throw new MomtvError(
         'BAD_BODY',
-        `${state.className} claims ${count} of its ${state.props.length} properties`,
+        `${state.className} claims ${count} of its ${state.capacity} values`,
       );
     }
     const refs: { index: number; element?: number }[] = [];
@@ -311,14 +442,13 @@ export class FrameReader {
       if (!encoding) {
         throw new MomtvError('BAD_BODY', `${state.className} has no property ${index}`);
       }
-      refs.push(encoding.k === 'array' ? { index, element: r.readBits(ELEMENT_BITS) } : { index });
+      refs.push(encoding.k === 'array' ? { index, element: readElement(r, encoding) } : { index });
     }
     const out: DecodedProp[] = [];
     for (const ref of refs) {
       const encoding = state.props[ref.index]!;
       const name = state.propNames[ref.index]!;
-      // An array reference carries one element, not the whole array.
-      const value = readPropValue(r, encoding.k === 'array' ? encoding.e! : encoding);
+      const value = readRecorded(r, state.modes[ref.index]!, encoding, ref.element);
       if (this.wanted(state.className, name)) {
         out.push(
           ref.element === undefined ? { name, value } : { name, element: ref.element, value },

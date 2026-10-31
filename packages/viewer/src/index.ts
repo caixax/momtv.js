@@ -41,7 +41,7 @@ export { readPakfile, readPakEntry, type PakEntry } from './bsp/pakfile.js';
 export { parseVpkDirectory, readVpkEntry, type VpkDirectory, type VpkEntry } from './bsp/vpk.js';
 export { parseVtf, parseVmtBaseTexture, type DecodedTexture } from './bsp/vtf.js';
 export { applyPatch, isToolMaterial, parseVmt, type Vmt } from './bsp/vmt.js';
-export { decompressZstd } from './bsp/zstd.js';
+export { decompressZstd } from '@caixax/momtv';
 export {
   firstOf,
   looseSource,

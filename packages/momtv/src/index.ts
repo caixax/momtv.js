@@ -20,6 +20,8 @@ export {
 export {
   readHeader,
   REPLAY_HEADER_SIZE,
+  headerSizeOf,
+  OLDEST_FORMAT_VERSION,
   REPLAY_MAGIC,
   SUPPORTED_FORMAT_VERSION,
   type ReplayHeader,
@@ -33,6 +35,7 @@ export {
   type Vec3,
 } from './splits.js';
 export { decompressBody, VALVE_LZMA_ID } from './body.js';
+export { decompressZstd } from './zstd.js';
 export { lzmaDecompress, decodeLzmaProperties, type LzmaProperties } from './lzma.js';
 export { ByteReader } from './byte-reader.js';
 export { BitReader } from './bit-reader.js';
@@ -43,11 +46,14 @@ export {
   type KeyframeIndexEntry,
   type ReplayBody,
   type ReplayClass,
+  type ReplayTempEntClass,
   type ReplaySound,
   type TimelineEvent,
+  type TimelineEventKind,
 } from './body-sections.js';
 export {
   decodePlayerTrack,
+  runStartOf,
   trackStateAt,
   FL_ONGROUND,
   type DecodeStats,
@@ -66,6 +72,8 @@ export {
   decodeEntityTracks,
   entityStateAt,
   ENTITY_STRIDE,
+  EF_NODRAW,
+  modelNameCrc,
   type EntityState,
   type EntityTrack,
   type EntityTracks,

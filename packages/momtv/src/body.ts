@@ -3,6 +3,7 @@ import { ReplayCompression } from './enums.js';
 import { MomtvError } from './error.js';
 import type { ReplayHeader } from './header.js';
 import { lzmaDecompress } from './lzma.js';
+import { decompressZstd } from './zstd.js';
 
 /** 'LZMA' as a little endian uint32 (Valve lzma_header_t id). */
 export const VALVE_LZMA_ID = 0x414d5a4c;
@@ -33,6 +34,13 @@ export function decompressBody(
 
   if (header.compression === ReplayCompression.None) {
     return r.raw(r.remaining, 'uncompressed body');
+  }
+  if (header.compression === ReplayCompression.Zstd) {
+    const out = decompressZstd(r.raw(r.remaining, 'Zstandard body'));
+    if (out.length > MAX_BODY_SIZE) {
+      throw new MomtvError('LIMIT_EXCEEDED', `Body exceeds the ${MAX_BODY_SIZE} byte cap`);
+    }
+    return out;
   }
   if (header.compression !== ReplayCompression.Lzma) {
     throw new MomtvError(

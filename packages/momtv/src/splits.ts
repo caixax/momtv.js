@@ -1,6 +1,6 @@
 import { ByteReader, toBytes } from './byte-reader.js';
 import { MomtvError } from './error.js';
-import { REPLAY_HEADER_SIZE } from './header.js';
+import { headerSizeOf } from './header.js';
 
 /** A 3D vector as serialized in the splits JSON. */
 export interface Vec3 {
@@ -55,8 +55,8 @@ const MAX_SPLITS_LENGTH = 4 * 1024 * 1024;
 /**
  * Reads the run splits JSON block that follows the fixed header.
  *
- * Layout: `int32 length` at offset {@link REPLAY_HEADER_SIZE}, then `length`
- * bytes of JSON text whose last byte is a NUL terminator.
+ * Layout: `int32 length` right after the fixed header, then `length` bytes of
+ * JSON text whose last byte is a NUL terminator.
  *
  * @returns the parsed splits and the absolute offset where the compressed
  * body starts.
@@ -67,7 +67,8 @@ export function readSplits(data: ArrayBuffer | Uint8Array): {
   bodyOffset: number;
 } {
   const r = new ByteReader(toBytes(data));
-  r.seek(REPLAY_HEADER_SIZE);
+  r.seek(4);
+  r.seek(headerSizeOf(r.i32('formatVersion')));
 
   const length = r.i32('splits length');
   if (length <= 0 || length > MAX_SPLITS_LENGTH) {

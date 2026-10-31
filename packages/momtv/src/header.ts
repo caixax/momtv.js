@@ -5,11 +5,22 @@ import { MomtvError } from './error.js';
 /** 'MMTV' as a little endian int32. */
 export const REPLAY_MAGIC = 0x56544d4d;
 
-/** The only format version this library currently understands. */
+/** The newest format version this library understands. */
 export const SUPPORTED_FORMAT_VERSION = 2;
+
+/** The oldest format version this library understands. */
+export const OLDEST_FORMAT_VERSION = 1;
 
 /** Size in bytes of the fixed replay header (packed, little endian). */
 export const REPLAY_HEADER_SIZE = 195;
+
+/**
+ * Size in bytes of the fixed header a format version writes. Version 1 is the
+ * same struct without the trailing style byte, which the game reads as 0.
+ */
+export function headerSizeOf(formatVersion: number): number {
+  return formatVersion === 1 ? REPLAY_HEADER_SIZE - 1 : REPLAY_HEADER_SIZE;
+}
 
 /**
  * The fixed 195 byte header at the start of every .momtv file.
@@ -87,10 +98,10 @@ export function readHeader(data: ArrayBuffer | Uint8Array): ReplayHeader {
   }
 
   const formatVersion = r.i32('formatVersion');
-  if (formatVersion !== SUPPORTED_FORMAT_VERSION) {
+  if (formatVersion < OLDEST_FORMAT_VERSION || formatVersion > SUPPORTED_FORMAT_VERSION) {
     throw new MomtvError(
       'UNSUPPORTED_VERSION',
-      `Unsupported replay format version ${formatVersion} (supported: ${SUPPORTED_FORMAT_VERSION})`,
+      `Unsupported replay format version ${formatVersion} (supported: ${OLDEST_FORMAT_VERSION} to ${SUPPORTED_FORMAT_VERSION})`,
     );
   }
 
@@ -116,6 +127,6 @@ export function readHeader(data: ArrayBuffer | Uint8Array): ReplayHeader {
     sampleCount: r.u8('sampleCount'),
     propBits: r.u8('propBits'),
     tempEntClassBits: r.u8('tempEntClassBits'),
-    style: r.u8('style'),
+    style: formatVersion === 1 ? 0 : r.u8('style'),
   };
 }

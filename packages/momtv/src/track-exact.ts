@@ -1,4 +1,5 @@
 import type { ReplayBody } from './body-sections.js';
+import type { Frame } from './frame-reader.js';
 import { walkFrames } from './frame-walk.js';
 import type { PlayerTrack } from './player-track.js';
 
@@ -114,16 +115,25 @@ export function decodeTrackExact(
     flags: 0,
   };
 
+  /** Applies what a frame says about the player: a fresh baseline, then changes. */
+  const follow = (frame: Frame): void => {
+    for (const created of frame.created) {
+      if (created.className !== PLAYER) continue;
+      for (const prop of created.state) apply(live, prop.name, prop.value);
+    }
+    for (const update of frame.updates) {
+      if (update.className !== PLAYER) continue;
+      for (const prop of update.props) apply(live, prop.name, prop.value);
+    }
+  };
+
   const stats = walkFrames(
     body,
     frameCount,
     propBits,
     { wanted: (className) => className === PLAYER },
     (tick, frame) => {
-      for (const update of frame?.updates ?? []) {
-        if (update.className !== PLAYER) continue;
-        for (const prop of update.props) apply(live, prop.name, prop.value);
-      }
+      if (frame) follow(frame);
       const at = tick * STRIDE;
       data[at] = live.x;
       data[at + 1] = live.y;
@@ -136,6 +146,11 @@ export function decodeTrackExact(
       data[at + 8] = live.viewOffsetZ;
       buttons[tick] = live.buttons;
       flags[tick] = live.flags & 0xffff;
+    },
+    // The first keyframe is where the run starts from: the player's baseline,
+    // with whatever had already changed from it.
+    (_slots, keyframe) => {
+      if (keyframe) follow(keyframe);
     },
   );
 

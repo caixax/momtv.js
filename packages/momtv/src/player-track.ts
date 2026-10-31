@@ -206,13 +206,22 @@ const BASELINE_VIEWMODEL_ARRAY_BITS = 55;
  * exactly on zone-event ticks where frames start with a zone entity block
  * instead of the player).
  */
+/**
+ * The tick the run timer starts on. Revision 2 says so with its own event;
+ * revision 1 starts the timer when the player leaves the start zone.
+ */
+export function runStartOf(body: Pick<ReplayBody, 'revision' | 'timeline'>): number {
+  if (body.revision === 2) return body.timeline.find((e) => e.kind === 'start')?.tick ?? 0;
+  return body.timeline.find((e) => e.zoneFlag === 3)?.tick ?? 0;
+}
+
 export function decodePlayerTrack(
   body: ReplayBody,
   frameCount: number,
   tickInterval: number,
   propBits = 5,
 ): PlayerTrack {
-  const runStartTick = body.timeline.find((e) => e.zoneFlag === 3)?.tick ?? 0;
+  const runStartTick = runStartOf(body);
   // A revision 2 body is read frame by frame, which is exact. Revision 1 lays
   // its frames out differently and still has to be searched.
   if (body.revision === 2) {
@@ -571,11 +580,10 @@ export function decodePlayerTrack(
     offset = next;
   }
 
-  const runStart = body.timeline.find((e) => e.zoneFlag === 3);
   return {
     tickInterval,
     frameCount,
-    startTick: runStart?.tick ?? 0,
+    startTick: runStartTick,
     data,
     buttons,
     flags,

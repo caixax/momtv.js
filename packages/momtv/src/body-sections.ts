@@ -3,17 +3,47 @@ import { ByteReader } from './byte-reader.js';
 import { MomtvError } from './error.js';
 import type { ReplayHeader } from './header.js';
 
+/**
+ * What a timeline event means for the run, whichever revision wrote it:
+ * the timer starting, a stage or checkpoint reached, the finish, or a zone
+ * transition that does not touch the timer.
+ */
+export type TimelineEventKind = 'start' | 'split' | 'finish' | 'zone';
+
+/**
+ * Revision 2 event types: the engine's reader stores the tick of a type 0 as
+ * where the timer starts, and reads a track and a stage number after a type 2.
+ * The finish (type 1) lands on the last tick, and a run time is exactly the
+ * ticks from the type 0 to it.
+ */
+const REVISION_2_KINDS: Record<number, TimelineEventKind> = {
+  0: 'start',
+  1: 'finish',
+  2: 'split',
+  3: 'zone',
+};
+
 /** One record of the body's event timeline (zone and timer events). */
 export interface TimelineEvent {
   /** Replay tick the event happened on. */
   tick: number;
+  /** What the event means for the run. */
+  kind: TimelineEventKind;
   /** Zone transition flag. Observed: 0, 1 (start), 2 (enter), 3 (exit). */
   zoneFlag: number;
   /** Track number, matches the header. */
   trackNum: number;
-  /** Event type: 1 initial, 2 mid-run split, 3 finish. */
+  /**
+   * Event type as the file writes it. Revision 1: 1 initial, 2 mid-run split,
+   * 3 finish. Revision 2: 0 timer start, 1 finish, 2 stage reached, 3 start
+   * zone entered.
+   */
   type: number;
-  /** Run timer value at the event, in seconds. */
+  /**
+   * Run timer value at the event, in seconds. Revision 2 does not write it,
+   * so it is worked out from the tick of the timer start, and is NaN for
+   * events before it.
+   */
   time: number;
   /** Segment (major checkpoint) number. */
   majorNum: number;
@@ -29,6 +59,14 @@ export interface ReplayClass {
   name: string;
   /** Property names in index order; indices in the bit stream refer to this list. */
   props: string[];
+}
+
+/** An entry of the temp entity class table. */
+export interface ReplayTempEntClass {
+  /** Class id the temp entity messages refer to. */
+  classId: number;
+  /** Class name, for example 'CTEWorldDecal'. */
+  name: string;
 }
 
 /** An entry of the sound table. */
@@ -83,6 +121,7 @@ export interface ReplayBody {
   revision: 1 | 2;
   timeline: TimelineEvent[];
   classes: ReplayClass[];
+  tempEntClasses: ReplayTempEntClass[];
   sounds: ReplaySound[];
   gameEvents: GameEventDef[];
   baselines: BaselineRecord[];
@@ -110,7 +149,14 @@ export function parseBody(
   body: Uint8Array,
   header: Pick<
     ReplayHeader,
-    'classCount' | 'sampleCount' | 'baselineCount' | 'keyFrameCount' | 'frameCount'
+    | 'tickInterval'
+    | 'runTime'
+    | 'classCount'
+    | 'tempEntClassCount'
+    | 'sampleCount'
+    | 'baselineCount'
+    | 'keyFrameCount'
+    | 'frameCount'
   >,
 ): ReplayBody {
   try {
@@ -125,7 +171,14 @@ function parseBodyRevision(
   body: Uint8Array,
   header: Pick<
     ReplayHeader,
-    'classCount' | 'sampleCount' | 'baselineCount' | 'keyFrameCount' | 'frameCount'
+    | 'tickInterval'
+    | 'runTime'
+    | 'classCount'
+    | 'tempEntClassCount'
+    | 'sampleCount'
+    | 'baselineCount'
+    | 'keyFrameCount'
+    | 'frameCount'
   >,
   revision: 1 | 2,
 ): ReplayBody {
@@ -139,11 +192,16 @@ function parseBodyRevision(
       throw new MomtvError('LIMIT_EXCEEDED', `Timeline declares ${timelineCount} events`);
     }
     for (let i = 0; i < timelineCount; i++) {
+      const tick = r.i32('event tick');
+      const zoneFlag = r.u16('event zone flag');
+      const trackNum = r.u8('event track');
+      const type = r.u8('event type');
       timeline.push({
-        tick: r.i32('event tick'),
-        zoneFlag: r.u16('event zone flag'),
-        trackNum: r.u8('event track'),
-        type: r.u8('event type'),
+        tick,
+        kind: type === 3 ? 'finish' : type === 2 ? 'split' : 'zone',
+        zoneFlag,
+        trackNum,
+        type,
         time: r.f64('event time'),
         majorNum: r.u8('event major'),
         minorNum: r.u8('event minor'),
@@ -167,6 +225,7 @@ function parseBodyRevision(
       }
       timeline.push({
         tick,
+        kind: REVISION_2_KINDS[flag] ?? 'zone',
         zoneFlag: flag,
         trackNum,
         type: flag,
@@ -174,6 +233,20 @@ function parseBodyRevision(
         majorNum,
         minorNum: 0,
       });
+    }
+    // The timer value is not written, but it follows from where the timer
+    // started. The game times a run to within a tick, from where inside its
+    // tick the start was crossed, so the ticks alone can be up to one short;
+    // the finish, whose time the header records, says by how much.
+    const start = timeline.find((event) => event.kind === 'start');
+    const finish = timeline.find((event) => event.kind === 'finish');
+    const interval = header.tickInterval;
+    if (start && interval > 0) {
+      const measured = finish ? header.runTime - (finish.tick - start.tick) * interval : 0;
+      const within = Number.isFinite(measured) && Math.abs(measured) <= interval ? measured : 0;
+      for (const event of timeline) {
+        if (event.tick >= start.tick) event.time = (event.tick - start.tick) * interval + within;
+      }
     }
   }
 
@@ -188,10 +261,18 @@ function parseBodyRevision(
     classes.push({ classId, name, props });
   }
 
-  // 3. sound table
+  // 2b. temp entity class table, the same shape without the properties
+  const tempEntClasses: ReplayTempEntClass[] = [];
+  for (let c = 0; c < header.tempEntClassCount; c++) {
+    tempEntClasses.push({ classId: r.u8('temp entity class id'), name: r.cString(256, 'name') });
+  }
+
+  // 3. sound table. Revision 2 writes the sound names alone, with the
+  // engine's prefix characters (such as ')' for spatial stereo) kept.
   const sounds: ReplaySound[] = [];
   for (let s = 0; s < header.sampleCount; s++) {
-    sounds.push({ soundIndex: r.u16('sound index'), path: r.cString(1024, 'sound path') });
+    const soundIndex = revision === 1 ? r.u16('sound index') : s;
+    sounds.push({ soundIndex, path: r.cString(1024, 'sound path') });
   }
 
   // 4 and 5. the game event definitions and the baselines, in the order the
@@ -272,6 +353,7 @@ function parseBodyRevision(
     revision,
     timeline,
     classes,
+    tempEntClasses,
     sounds,
     gameEvents,
     baselines,

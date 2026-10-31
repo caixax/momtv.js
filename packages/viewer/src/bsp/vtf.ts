@@ -11,7 +11,7 @@
  */
 import { lzmaDecompress } from '@caixax/momtv';
 import { decodeBc7 } from './bc7.js';
-import { decompressZstd } from './zstd.js';
+import { decompressZstd } from '@caixax/momtv';
 
 /** Image formats, numbered as the engine numbers them. */
 const FORMAT = {

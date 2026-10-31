@@ -83,6 +83,8 @@ export const StyleName: Readonly<Record<Style, string>> = {
 export enum ReplayCompression {
   None = 0,
   Lzma = 1,
+  /** A Zstandard frame, with no wrapper around it. */
+  Zstd = 2,
 }
 
 /**

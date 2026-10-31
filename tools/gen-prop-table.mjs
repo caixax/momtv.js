@@ -17,6 +17,7 @@ const OUT = 'packages/momtv/src/prop-table.ts';
 /** Property kinds, matching the dump's Type column. */
 const KINDS = {
   Int: 'int',
+  Int64: 'int64',
   Float: 'float',
   Vector: 'vector',
   VectorXY: 'vectorxy',
@@ -112,29 +113,13 @@ function foldIndexedProps(props) {
 }
 
 /**
- * Properties the recorder writes one bit wider than the network table says.
- * Measured against exact frame boundaries: without the extra bit every frame
- * carrying one of these ends a bit early and throws the walk out of step.
- */
-const EXTRA_BITS = {
-  m_iLandTick: 1,
-  m_iJumpTick: 1,
-  m_iEarlyJumpTiming: 1,
-  hasteEndTick: 1,
-  damageBoostEndTick: 1,
-  slickEndTick: 1,
-  flightEndTick: 1,
-  defragTimerEndTick: 1,
-};
-
-/**
  * Arrays the dump reports without their element encoding. The dump prints the
  * property as a bare `Array` with no length field and no elements, so the
  * encoding is filled in here.
  */
 const KNOWN_ARRAYS = {
   // Two view models (the weapon and the hands), each an entity handle.
-  m_hViewModel: { kind: 'array', bits: 0, countBits: 2, max: 2, element: EHANDLE },
+  m_hViewModel: { kind: 'array', bits: 0, countBits: 2, max: 2, element: EHANDLE, native: true },
 };
 
 const classes = {};
@@ -171,12 +156,14 @@ for (const props of Object.values(classes)) {
 
 const serialise = (prop) => {
   const parts = [`k:'${prop.kind}'`, `b:${prop.bits ?? 0}`];
-  if (prop.name && EXTRA_BITS[prop.name]) parts.push(`x:${EXTRA_BITS[prop.name]}`);
   if (prop.flags?.length) parts.push(`f:${JSON.stringify(prop.flags)}`);
   if (prop.kind === 'array') {
     parts.push(`c:${prop.countBits}`, `m:${prop.max}`);
     if (prop.element) parts.push(`e:{${serialise(prop.element)}}`);
     if (prop.structProps > 1) parts.push(`s:${prop.structProps}`);
+    // A network Array property, rather than one property per element, which
+    // changes how a reference names an element.
+    if (prop.native) parts.push('a:1');
   }
   return parts.join(',');
 };

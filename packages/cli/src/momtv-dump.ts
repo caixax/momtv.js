@@ -73,7 +73,7 @@ try {
     console.log('events:');
     for (const e of replay.events) {
       console.log(
-        `  tick ${String(e.tick).padStart(6)}  t=${fmtTime(e.time).padStart(9)}  type=${e.type} zone=${e.zoneFlag} segment=${e.majorNum}.${e.minorNum}`,
+        `  tick ${String(e.tick).padStart(6)}  t=${fmtTime(e.time).padStart(9)}  ${e.kind.padEnd(6)} type=${e.type} zone=${e.zoneFlag} segment=${e.majorNum}.${e.minorNum}`,
       );
     }
     const track = replay.toTrack();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decompressZstd } from '../src/bsp/zstd.js';
+import { decompressZstd } from '../src/zstd.js';
 
 /** Builds a frame whose blocks are written out by hand. */
 function frame(blocks: Uint8Array[], options: { contentSize?: number; checksum?: boolean } = {}) {
